@@ -1,0 +1,2621 @@
+/* APIX design tokens.
+ *
+ * Values are Apple system colours (Human Interface Guidelines), so the palette
+ * matches what the rest of the OS looks like: the dark greys are the iOS/macOS
+ * `systemBackground` family (#000000 / #1C1C1E / #2C2C2E / #3A3A3C) and the
+ * accent is `systemBlue` (#0A84FF dark, #007AFF light).
+ *
+ * Layout:
+ *   :root                  shared scale (type, radii, motion) + dark values
+ *   :root[data-theme=light] light overrides
+ *   :root[data-theme=dark]  explicit dark, so the attribute is authoritative
+ *
+ * `data-theme` always holds the *resolved* theme; "follow system" is resolved
+ * in JS (useAppearance) so the stylesheet never needs a media query.
+ */
+
+:root {
+  color-scheme: dark;
+
+  /* ---- type ------------------------------------------------------------ */
+  /* Every font-size and line-height in the stylesheets is a calc() of this, so
+     one value scales the whole interface. Set from the appearance settings. */
+  --apx-font-scale: 1;
+
+  /* Inter carries Latin; Noto Sans SC catches every CJK glyph through
+     per-glyph fallback, which is what replaces the stock Microsoft YaHei look.
+     Neither has CJK, so the OS fonts after them are only a last resort. */
+  --apx-font:
+    "Inter", "Noto Sans SC", -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+    "Hiragino Sans GB", "Microsoft YaHei", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --apx-font-brand: "Montserrat", var(--apx-font);
+  --apx-font-mono:
+    "JetBrains Mono", "SF Mono", "Fira Code", Consolas, "Liberation Mono", Menlo, Courier,
+    "Noto Sans SC", "PingFang SC", "Microsoft YaHei";
+
+  --apx-text: calc(14px * var(--apx-font-scale));
+  --apx-leading: calc(21px * var(--apx-font-scale));
+  --apx-text-sm: calc(12.5px * var(--apx-font-scale));
+  --apx-leading-sm: calc(18px * var(--apx-font-scale));
+
+  /* ---- metrics --------------------------------------------------------- */
+  --apx-chat-width: 748px;
+  --apx-scrollbar-width: 8px;
+  --apx-hit-size: 28px;
+
+  /* ---- radii (Apple: 6 / 8 / 12 / 16 / 20) ----------------------------- */
+  --apx-radius-xs: 6px;
+  --apx-radius-sm: 8px;
+  --apx-radius-md: 12px;
+  --apx-radius-lg: 16px;
+  --apx-radius-xl: 20px;
+  --apx-radius-panel: 24px;
+
+  /* ---- motion ---------------------------------------------------------- */
+  --apx-ease: cubic-bezier(0.25, 0.1, 0.25, 1);
+  --apx-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --apx-ease-spring: cubic-bezier(0.34, 1.4, 0.64, 1);
+  --apx-duration-fast: 0.12s;
+  --apx-duration: 0.22s;
+  --apx-duration-slow: 0.36s;
+
+  /* ---- absolute colours ------------------------------------------------ */
+  --apx-white: #ffffff;
+  --apx-black: #000000;
+  --apx-transparent: transparent;
+
+  /* ---- dark palette ---------------------------------------------------- */
+  --apx-bg: #000000;
+  --apx-bg-grouped: #000000;
+  --apx-bg-raised: #1c1c1e;
+  --apx-bg-raised-2: #2c2c2e;
+  --apx-bg-raised-3: #3a3a3c;
+  --apx-bg-overlay: #2c2c2e;
+  --apx-sidebar-bg: #1c1c1e;
+  --apx-input-bg: #1c1c1e;
+  --apx-card-bg: #1c1c1e;
+  --apx-float-bg: #2c2c2e;
+  --apx-float-bg-hover: #3a3a3c;
+  --apx-menu-bg: rgba(44, 44, 46, 0.72);
+  --apx-selector-bg: #2c2c2e;
+  --apx-tip-bg: #2c2c2e;
+  --apx-toast-bg: #2c2c2e;
+  --apx-toast-label: #ffffff;
+  --apx-tooltip-bg: #2c2c2e;
+
+  --apx-field-bg: rgba(120, 120, 128, 0.24);
+  --apx-fill-1: rgba(120, 120, 128, 0.28);
+  --apx-fill-2: rgba(120, 120, 128, 0.2);
+  --apx-fill-solid: rgba(120, 120, 128, 0.36);
+  --apx-fill-accent: rgba(10, 132, 255, 0.28);
+  --apx-danger-fill: rgba(255, 69, 58, 0.18);
+  --apx-row-hover: rgba(120, 120, 128, 0.16);
+  --apx-nav-hover: rgba(120, 120, 128, 0.2);
+  --apx-nav-active: rgba(120, 120, 128, 0.32);
+  --apx-nav-active-accent: rgba(10, 132, 255, 0.24);
+  --apx-ghost-active-fill: rgba(120, 120, 128, 0.32);
+  --apx-ghost-active-border: rgba(235, 235, 245, 0.32);
+
+  --apx-hairline-1: rgba(235, 235, 245, 0.08);
+  --apx-hairline-2: rgba(235, 235, 245, 0.14);
+  --apx-hairline-3: rgba(235, 235, 245, 0.22);
+  --apx-hairline-4: rgba(235, 235, 245, 0.32);
+  --apx-card-stroke: rgba(235, 235, 245, 0.16);
+
+  --apx-label-1: #ffffff;
+  --apx-label-2: rgba(235, 235, 245, 0.62);
+  --apx-label-3: rgba(235, 235, 245, 0.44);
+  --apx-label-4: rgba(235, 235, 245, 0.3);
+  --apx-label-dimmed: rgba(235, 235, 245, 0.2);
+  --apx-label-inverted: #1c1c1e;
+  --apx-invert: #f9fafb;
+  --apx-idle: #8e8e93;
+
+  --apx-accent: #0a84ff;
+  --apx-accent-hover: #409cff;
+  --apx-accent-strong: #0a84ff;
+  --apx-accent-soft: #409cff;
+  --apx-accent-weak: rgba(10, 132, 255, 0.32);
+  --apx-accent-weak-2: rgba(10, 132, 255, 0.24);
+  --apx-accent-subtle: rgba(10, 132, 255, 0.18);
+  --apx-accent-dim: rgba(10, 132, 255, 0.4);
+  --apx-accent-dimmed: rgba(10, 132, 255, 0.3);
+  --apx-accent-on: #ffffff;
+  --apx-link: #0a84ff;
+  --apx-blue-100: #dbeafe;
+  --apx-blue-300: #93c5fd;
+  --apx-blue-400: #60a5fa;
+  --apx-blue-500: #3b82f6;
+  --apx-blue-700: rgba(10, 132, 255, 0.45);
+  --apx-blue-800: rgba(10, 132, 255, 0.28);
+  --apx-blue-900: rgba(10, 132, 255, 0.2);
+  --apx-blue-950: rgba(10, 132, 255, 0.14);
+
+  --apx-danger: #ff453a;
+  --apx-danger-soft: #ff6961;
+  --apx-red: #ff453a;
+  --apx-red-soft: #ff6961;
+  --apx-red-weak: rgba(255, 69, 58, 0.18);
+  --apx-red-50: rgba(255, 69, 58, 0.1);
+  --apx-red-a08: rgba(255, 69, 58, 0.12);
+  --apx-red-a12: rgba(255, 69, 58, 0.18);
+  --apx-red-900: rgba(255, 69, 58, 0.24);
+  --apx-success: #30d158;
+  --apx-success-soft: #4ade80;
+  --apx-green: #30d158;
+  --apx-green-soft: #4ade80;
+  --apx-green-weak: rgba(48, 209, 88, 0.18);
+  --apx-green-a12: rgba(48, 209, 88, 0.18);
+  --apx-green-900: rgba(48, 209, 88, 0.24);
+  --apx-warning: #ff9f0a;
+  --apx-warning-soft: #ffb340;
+  --apx-warning-label: #ffb340;
+  --apx-amber: #ff9f0a;
+  --apx-amber-soft: #ffb340;
+  --apx-amber-label: #ffb340;
+  --apx-amber-weak: rgba(255, 159, 10, 0.18);
+  --apx-amber-900: rgba(255, 159, 10, 0.24);
+  /* Ink for text sitting on a *solid* amber fill — the 默认 flag's pill.
+     Unlike every other amber token this one is deliberately the same in both
+     themes, because both themes fill that pill with the same bright amber.
+     It exists because the pill used `--apx-amber-label`, and in the dark theme
+     that token is `--apx-amber-soft` to the byte (#ffb340 on #ffb340), so the
+     label rendered as an empty yellow ellipse. `--apx-amber-label` keeps its
+     own job — amber *text* on the page or on a translucent amber wash — which
+     is why it was not simply darkened. */
+  --apx-amber-ink: #3a2400;
+
+  --apx-bubble-bg: #0a84ff;
+  --apx-bubble-label: #ffffff;
+  --apx-code-bg: #1c1c1e;
+  --apx-code-inline-bg: rgba(120, 120, 128, 0.24);
+
+  --apx-scrim: rgba(0, 0, 0, 0.4);
+  --apx-scrim-strong: rgba(0, 0, 0, 0.62);
+  --apx-scrollbar: rgba(235, 235, 245, 0.24);
+  --apx-scrollbar-hover: rgba(235, 235, 245, 0.42);
+
+  /* Wash over the new-chat artwork so the copy stays readable. */
+  --apx-backdrop-veil: rgba(0, 0, 0, 0.34);
+
+  --apx-shadow-float: 0 8px 28px rgba(0, 0, 0, 0.45);
+  --apx-shadow-popover: 0 12px 32px rgba(0, 0, 0, 0.5);
+
+  /* Chevron for <select>. A data URI cannot use `currentColor`, so the arrow
+     has to be redeclared per theme — it is the only way to keep the native
+     control from drawing its own OS-coloured triangle. */
+  --apx-select-arrow: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12' fill='none' stroke='%23ebebf5' stroke-opacity='0.5' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M2.75 4.5L6 7.75l3.25-3.25'/%3E%3C/svg%3E");
+
+  --apx-font-brand: "Montserrat", var(--apx-font);
+  background-color: var(--apx-bg);
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+
+  --apx-select-arrow: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12' fill='none' stroke='%233c3c43' stroke-opacity='0.55' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M2.75 4.5L6 7.75l3.25-3.25'/%3E%3C/svg%3E");
+
+  --apx-bg: #ffffff;
+  --apx-bg-grouped: #f2f2f7;
+  --apx-bg-raised: #ffffff;
+  --apx-bg-raised-2: #f2f2f7;
+  --apx-bg-raised-3: #e5e5ea;
+  --apx-bg-overlay: #ffffff;
+  --apx-sidebar-bg: #f2f2f7;
+  --apx-input-bg: #ffffff;
+  --apx-card-bg: #ffffff;
+  --apx-float-bg: #ffffff;
+  --apx-float-bg-hover: #f2f2f7;
+  --apx-menu-bg: rgba(255, 255, 255, 0.76);
+  --apx-selector-bg: #f2f2f7;
+  --apx-tip-bg: #f2f2f7;
+  --apx-toast-bg: #1c1c1e;
+  --apx-toast-label: #ffffff;
+  --apx-tooltip-bg: #1c1c1e;
+
+  --apx-field-bg: rgba(120, 120, 128, 0.12);
+  --apx-fill-1: rgba(120, 120, 128, 0.2);
+  --apx-fill-2: rgba(120, 120, 128, 0.1);
+  --apx-fill-solid: rgba(120, 120, 128, 0.2);
+  --apx-fill-accent: rgba(0, 122, 255, 0.2);
+  --apx-danger-fill: rgba(255, 59, 48, 0.12);
+  --apx-row-hover: rgba(120, 120, 128, 0.08);
+  --apx-nav-hover: rgba(120, 120, 128, 0.1);
+  --apx-nav-active: rgba(120, 120, 128, 0.2);
+  --apx-nav-active-accent: rgba(0, 122, 255, 0.16);
+  --apx-ghost-active-fill: rgba(120, 120, 128, 0.2);
+  --apx-ghost-active-border: rgba(60, 60, 67, 0.32);
+
+  --apx-hairline-1: rgba(60, 60, 67, 0.1);
+  --apx-hairline-2: rgba(60, 60, 67, 0.16);
+  --apx-hairline-3: rgba(60, 60, 67, 0.26);
+  --apx-hairline-4: rgba(60, 60, 67, 0.36);
+  --apx-card-stroke: rgba(60, 60, 67, 0.16);
+
+  --apx-label-1: #000000;
+  --apx-label-2: rgba(60, 60, 67, 0.62);
+  --apx-label-3: rgba(60, 60, 67, 0.46);
+  --apx-label-4: rgba(60, 60, 67, 0.32);
+  --apx-label-dimmed: rgba(60, 60, 67, 0.2);
+  --apx-label-inverted: #ffffff;
+  --apx-invert: #1c1c1e;
+  --apx-idle: #8e8e93;
+
+  --apx-accent: #007aff;
+  --apx-accent-hover: #0069d9;
+  --apx-accent-strong: #0062cc;
+  --apx-accent-soft: #007aff;
+  --apx-accent-weak: rgba(0, 122, 255, 0.3);
+  --apx-accent-weak-2: rgba(0, 122, 255, 0.2);
+  --apx-accent-subtle: rgba(0, 122, 255, 0.12);
+  --apx-accent-dim: rgba(0, 122, 255, 0.36);
+  --apx-accent-dimmed: rgba(0, 122, 255, 0.24);
+  --apx-accent-on: #ffffff;
+  --apx-link: #007aff;
+  --apx-blue-100: #e6f1fb;
+  --apx-blue-300: #85b7eb;
+  --apx-blue-400: #378add;
+  --apx-blue-500: #007aff;
+  --apx-blue-700: rgba(0, 122, 255, 0.4);
+  --apx-blue-800: rgba(0, 122, 255, 0.24);
+  --apx-blue-900: rgba(0, 122, 255, 0.16);
+  --apx-blue-950: rgba(0, 122, 255, 0.1);
+
+  --apx-danger: #ff3b30;
+  --apx-danger-soft: #ff6961;
+  --apx-red: #ff3b30;
+  --apx-red-soft: #ff6961;
+  --apx-red-weak: rgba(255, 59, 48, 0.12);
+  --apx-red-50: rgba(255, 59, 48, 0.08);
+  --apx-red-a08: rgba(255, 59, 48, 0.08);
+  --apx-red-a12: rgba(255, 59, 48, 0.12);
+  --apx-red-900: rgba(255, 59, 48, 0.16);
+  --apx-success: #34c759;
+  --apx-success-soft: #30d158;
+  --apx-green: #34c759;
+  --apx-green-soft: #30d158;
+  --apx-green-weak: rgba(52, 199, 89, 0.14);
+  --apx-green-a12: rgba(52, 199, 89, 0.14);
+  --apx-green-900: rgba(52, 199, 89, 0.18);
+  --apx-warning: #ff9500;
+  --apx-warning-soft: #ffa726;
+  --apx-warning-label: #c93400;
+  --apx-amber: #ff9500;
+  --apx-amber-soft: #ffa726;
+  --apx-amber-label: #c93400;
+  --apx-amber-weak: rgba(255, 149, 0, 0.14);
+  --apx-amber-900: rgba(255, 149, 0, 0.18);
+
+  --apx-bubble-bg: #007aff;
+  --apx-bubble-label: #ffffff;
+  --apx-code-bg: #f6f6f8;
+  --apx-code-inline-bg: rgba(120, 120, 128, 0.12);
+
+  --apx-scrim: rgba(0, 0, 0, 0.2);
+  --apx-scrim-strong: rgba(0, 0, 0, 0.34);
+  --apx-scrollbar: rgba(60, 60, 67, 0.28);
+  --apx-scrollbar-hover: rgba(60, 60, 67, 0.46);
+
+  --apx-backdrop-veil: rgba(255, 255, 255, 0.4);
+
+  --apx-shadow-float: 0 8px 28px rgba(0, 0, 0, 0.14);
+  --apx-shadow-popover: 0 12px 32px rgba(0, 0, 0, 0.18);
+
+  background-color: var(--apx-bg);
+}
+
+/* Users who asked for less motion get none of the decorative kind. */
+:root[data-reduce-motion="true"] * {
+  animation-duration: 0.001ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.001ms !important;
+}
+
+
+/* ------------------------------------------------------------------ base */
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  font-family: var(--apx-font);
+  font-size: var(--apx-text);
+  line-height: var(--apx-leading);
+  font-optical-sizing: auto;
+  color: var(--apx-label-1);
+  overflow: hidden;
+}
+
+button,
+input,
+textarea,
+select {
+  font-family: inherit;
+  font-size: inherit;
+  color: inherit;
+}
+
+::selection {
+  background: var(--apx-blue-500);
+  color: var(--apx-white);
+}
+
+/* Keyboard focus only — pointer users never see the ring. */
+:focus-visible {
+  outline: 2px solid var(--apx-accent);
+  outline-offset: 2px;
+}
+
+/* Fields draw their own focus treatment, so the ring would double up. */
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+  outline: none;
+}
+
+/* Scrollbar: transparent track, thumb only, no native bar over the dark UI. */
+::-webkit-scrollbar {
+  width: var(--apx-scrollbar-width);
+  height: var(--apx-scrollbar-width);
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: var(--apx-scrollbar);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--apx-scrollbar-hover);
+}
+
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* ---------------------------------------------------------------- layout */
+
+/* 工具栏下面那一行。让设置页叠在对话面板上，而不是替换它——卸载对话面板会重掷
+   背景、丢掉未发送的草稿、把滚动位置复位、并重建每一张消息卡片，也就是切换设置
+   时那种顿挫感的来源。 */
+.stage {
+  position: relative;
+  min-height: 0;
+  display: grid;
+  /* `minmax(0, 1fr)`, not the implicit `auto` row: `.body`'s own height comes
+     from its children, and an auto row would let the whole pane collapse. */
+  grid-template-rows: minmax(0, 1fr);
+}
+
+.stage > .body {
+  min-height: 0;
+}
+
+.settings-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr);
+  background: var(--apx-bg);
+}
+
+.app {
+  height: 100vh;
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  background: var(--apx-bg);
+}
+
+.body {
+  display: grid;
+  grid-template-columns: 244px 1fr;
+  min-height: 0;
+}
+
+.body.with-events {
+  grid-template-columns: 244px 1fr 420px;
+}
+
+.center {
+  position: relative;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  min-height: 0;
+  min-width: 0;
+  background: var(--apx-bg);
+}
+
+/* Chat content sits above the new-chat backdrop. */
+.center > .transcript-wrap,
+.center > .composer-area {
+  position: relative;
+  z-index: 1;
+}
+
+/* Decorative backdrop for an empty chat, re-rolled per chat. */
+.newchat-backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  opacity: 0.62;
+  pointer-events: none;
+}
+
+/* Flat wash so the empty-state copy stays readable over the artwork. It follows
+   the theme: a black wash over dark artwork, a white one over the light set. */
+.newchat-backdrop::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: var(--apx-backdrop-veil);
+}
+
+/* --------------------------------------------------------------- toolbar */
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  /* min-height, not height: the row has to grow when the text-size setting goes up. */
+  min-height: 48px;
+  padding: 0 12px 0 14px;
+  background: var(--apx-sidebar-bg);
+  border-bottom: 0.5px solid var(--apx-hairline-3);
+}
+
+/* The window title bar carries the app name and icon; the toolbar starts with
+   session state instead of repeating a brand block. */
+
+.toolbar-meta {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.meta-item {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.meta-key {
+  color: var(--apx-label-4);
+  font-size: calc(11px * var(--apx-font-scale));
+}
+
+.meta-value {
+  color: var(--apx-label-2);
+  font-size: calc(12px * var(--apx-font-scale));
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 300px;
+}
+
+.toolbar-actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: 0 0 auto;
+}
+
+.dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--apx-idle);
+}
+
+.dot-starting {
+  background: var(--apx-warning);
+}
+
+.dot-running {
+  background: var(--apx-success);
+}
+
+.dot-exited {
+  background: var(--apx-danger);
+}
+
+.dot-stopped {
+  background: var(--apx-idle);
+}
+
+.engine-label {
+  color: var(--apx-label-4);
+  font-size: calc(11px * var(--apx-font-scale));
+  margin-right: 6px;
+}
+
+/* --------------------------------------------------------------- buttons */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border: none;
+  border-radius: var(--apx-radius-sm);
+  background: transparent;
+  color: var(--apx-label-2);
+  font-size: calc(12.5px * var(--apx-font-scale));
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background var(--apx-duration-fast) linear,
+    color var(--apx-duration-fast) linear;
+}
+
+.btn:hover:not(:disabled) {
+  background: var(--apx-fill-2);
+  color: var(--apx-label-1);
+}
+
+.btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.btn-ghost {
+  background: transparent;
+}
+
+.btn-primary {
+  background: var(--apx-accent);
+  color: var(--apx-accent-on);
+  font-weight: 500;
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: var(--apx-accent-hover);
+  color: var(--apx-accent-on);
+}
+
+.btn-danger {
+  background: transparent;
+  color: var(--apx-danger);
+}
+
+.btn-danger:hover:not(:disabled) {
+  background: var(--apx-danger-fill);
+  color: var(--apx-danger);
+}
+
+.btn-block {
+  display: flex;
+  width: 100%;
+  justify-content: center;
+}
+
+.btn-icon {
+  padding: 3px 7px;
+  line-height: 1;
+}
+
+kbd {
+  font-family: var(--apx-font-mono);
+  font-size: calc(10px * var(--apx-font-scale));
+  border: 0.5px solid currentcolor;
+  border-radius: var(--apx-radius-xs);
+  padding: 0 3px;
+  opacity: 0.7;
+  margin-left: 2px;
+}
+
+/* ------------------------------------------------------------- left rail */
+
+.rail {
+  background: var(--apx-sidebar-bg);
+  border-right: 0.5px solid var(--apx-hairline-3);
+  /* The session list is the only scrolling region, so the section header and
+     the foot stay put while a long workspace list moves. */
+  overflow: hidden;
+  padding: 12px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.rail-block-last {
+  margin-top: auto;
+}
+
+.rail-title {
+  font-size: calc(11.5px * var(--apx-font-scale));
+  font-weight: 500;
+  color: var(--apx-label-3);
+  margin: 0 0 8px;
+}
+
+.rail-note {
+  color: var(--apx-label-4);
+  font-size: calc(12px * var(--apx-font-scale));
+  line-height: calc(18px * var(--apx-font-scale));
+  margin: 0;
+}
+
+.rail-input {
+  width: 100%;
+  background: var(--apx-field-bg);
+  border: 0.5px solid var(--apx-hairline-2);
+  border-radius: var(--apx-radius-sm);
+  padding: 6px 8px;
+  margin: 8px 0 0;
+  font-size: calc(12px * var(--apx-font-scale));
+  font-family: var(--apx-font-mono);
+}
+
+.rail-input:focus {
+  outline: none;
+  border-color: var(--apx-accent-soft);
+}
+
+.kv {
+  margin: 0;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 10px;
+  font-size: calc(11.5px * var(--apx-font-scale));
+}
+
+.kv dt {
+  color: var(--apx-label-4);
+}
+
+.kv dd {
+  margin: 0;
+  color: var(--apx-label-3);
+  font-family: var(--apx-font-mono);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.queue-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: calc(12px * var(--apx-font-scale));
+  color: var(--apx-label-3);
+}
+
+.queue-list li {
+  display: flex;
+  gap: 6px;
+  align-items: baseline;
+}
+
+.queue-tag {
+  color: var(--apx-link);
+  font-size: calc(10px * var(--apx-font-scale));
+  border: 0.5px solid var(--apx-accent-subtle);
+  border-radius: var(--apx-radius-xs);
+  padding: 0 4px;
+  flex: 0 0 auto;
+}
+
+/* ------------------------------------------------------------- transcript */
+
+.transcript {
+  overflow-y: auto;
+  overflow-anchor: none;
+  /* Centres the reading column without an extra wrapper element. */
+  padding: 16px max(24px, calc((100% - var(--apx-chat-width)) / 2)) 24px;
+  display: flex;
+  flex-direction: column;
+}
+
+.transcript > .row + .row {
+  margin-top: 12px;
+}
+
+.transcript > .row-assistant + .row-assistant {
+  margin-top: 6px;
+}
+
+.transcript-empty {
+  margin: auto;
+  text-align: center;
+  color: var(--apx-label-2);
+  max-width: 440px;
+}
+
+.empty-title {
+  color: var(--apx-label-1);
+  font-size: calc(14px * var(--apx-font-scale));
+  margin: 0 0 6px;
+}
+
+.empty-hint {
+  margin: 0;
+  font-size: calc(13px * var(--apx-font-scale));
+  line-height: calc(20px * var(--apx-font-scale));
+}
+
+/* User messages: right-aligned bubble. */
+.row-user {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.bubble {
+  position: relative;
+  max-width: 82%;
+  background: var(--apx-bubble-bg);
+  border-radius: var(--apx-radius-xl);
+  padding: 10px 16px;
+  color: var(--apx-bubble-label);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* Assistant messages: flat prose in the content column. */
+.row-assistant {
+  color: var(--apx-label-1);
+}
+
+.row-notice {
+  font-size: var(--apx-text-sm);
+  line-height: var(--apx-leading-sm);
+}
+
+.row-working {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--apx-accent-soft);
+  font-size: calc(13px * var(--apx-font-scale));
+}
+
+.working-text {
+  font-variant-numeric: tabular-nums;
+}
+
+/* rich text */
+
+.rich {
+  word-break: break-word;
+}
+
+/*
+ * Markdown blocks.
+ *
+ * The renderer emits block-level elements, so vertical rhythm is a single
+ * adjacent-sibling rule rather than margins on each type — that keeps code
+ * blocks, tables and paragraphs from compounding their spacing when they meet.
+ */
+.rich > * + * {
+  margin-top: 10px;
+}
+
+.rich > * + .md-heading {
+  margin-top: 18px;
+}
+
+.rich > * + .md-hr {
+  margin-top: 16px;
+}
+
+.md-para {
+  margin: 0;
+  white-space: pre-wrap;
+  font-size: var(--apx-text);
+  line-height: var(--apx-leading);
+}
+
+.md-heading {
+  margin: 0;
+  font-weight: 600;
+  color: var(--apx-label-1);
+  line-height: calc(22px * var(--apx-font-scale));
+}
+
+/* Sized for a transcript, not a document: an h1 in a chat bubble would be
+   louder than the app's own chrome. */
+.md-h1 {
+  font-size: calc(16px * var(--apx-font-scale));
+}
+
+.md-h2 {
+  font-size: calc(14.5px * var(--apx-font-scale));
+}
+
+.md-h3,
+.md-h4,
+.md-h5,
+.md-h6 {
+  font-size: calc(13.5px * var(--apx-font-scale));
+  color: var(--apx-label-2);
+}
+
+.md-list {
+  margin: 0;
+  padding-left: 22px;
+  font-size: var(--apx-text);
+  line-height: var(--apx-leading);
+}
+
+.md-list li + li {
+  margin-top: 3px;
+}
+
+.md-list .md-list {
+  margin-top: 3px;
+}
+
+.md-list ::marker {
+  color: var(--apx-label-3);
+}
+
+.md-table-wrap {
+  overflow-x: auto;
+  border: 0.5px solid var(--apx-hairline-2);
+  border-radius: var(--apx-radius-sm);
+}
+
+.md-table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: calc(12.5px * var(--apx-font-scale));
+  line-height: calc(19px * var(--apx-font-scale));
+}
+
+.md-table th {
+  padding: 7px 11px;
+  text-align: left;
+  font-weight: 500;
+  color: var(--apx-label-2);
+  background: var(--apx-bg-raised-2);
+  border-bottom: 0.5px solid var(--apx-hairline-2);
+}
+
+.md-table td {
+  padding: 7px 11px;
+  color: var(--apx-label-1);
+  border-bottom: 0.5px solid var(--apx-hairline-1);
+  vertical-align: top;
+}
+
+.md-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.md-table tbody tr:hover {
+  background: var(--apx-row-hover);
+}
+
+.md-quote {
+  margin: 0;
+  padding: 2px 0 2px 12px;
+  border-left: 2px solid var(--apx-hairline-4);
+  color: var(--apx-label-2);
+  white-space: pre-wrap;
+  font-size: var(--apx-text);
+  line-height: var(--apx-leading);
+}
+
+.md-hr {
+  height: 0;
+  border: none;
+  border-top: 0.5px solid var(--apx-hairline-2);
+}
+
+.inline-em {
+  font-style: italic;
+}
+
+.inline-strike {
+  text-decoration: line-through;
+  color: var(--apx-label-3);
+}
+
+/* A link in assistant output. `cursor: pointer` has to be set here rather than
+   inherited from the browser, because the anchor carries no href (see the note
+   in rich.tsx) — which is also why hover and focus states are spelled out. */
+.inline-link {
+  color: var(--apx-accent);
+  text-decoration: underline;
+  text-decoration-color: var(--apx-accent-dimmed);
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.inline-link:hover {
+  text-decoration-color: var(--apx-accent);
+}
+
+.inline-link:focus-visible {
+  outline: 2px solid var(--apx-accent);
+  outline-offset: 2px;
+  border-radius: var(--apx-radius-xs);
+}
+
+/* A scheme the capability does not scope, so it stays plain text. */
+.inline-link.is-inert {
+  cursor: default;
+  text-decoration-color: var(--apx-hairline-4);
+}
+
+.inline-code {
+  font-family: var(--apx-font-mono);
+  font-size: calc(12.5px * var(--apx-font-scale));
+  background: var(--apx-code-inline-bg);
+  border-radius: var(--apx-radius-xs);
+  padding: 1px 5px;
+  color: var(--apx-label-1);
+}
+
+.inline-strong {
+  color: var(--apx-label-1);
+  font-weight: 500;
+}
+
+.code-block {
+  position: relative;
+  background: var(--apx-code-bg);
+  border: 0.5px solid var(--apx-hairline-1);
+  border-radius: var(--apx-radius-sm);
+  padding: 10px 12px;
+  margin: 10px 0;
+  overflow-x: auto;
+}
+
+.code-block code {
+  font-family: var(--apx-font-mono);
+  font-size: calc(12.5px * var(--apx-font-scale));
+  line-height: calc(20px * var(--apx-font-scale));
+  white-space: pre;
+  color: var(--apx-label-2);
+}
+
+.code-head {
+  position: absolute;
+  top: 5px;
+  right: 6px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.code-lang {
+  font-size: calc(10.5px * var(--apx-font-scale));
+  color: var(--apx-label-4);
+}
+
+.code-copy {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border: none;
+  border-radius: var(--apx-radius-xs);
+  background: transparent;
+  color: var(--apx-label-4);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity var(--apx-duration-fast) linear,
+    background var(--apx-duration-fast) linear, color var(--apx-duration-fast) linear;
+}
+
+.code-block:hover .code-copy,
+.code-copy:focus-visible,
+.code-copy.is-copied {
+  opacity: 1;
+}
+
+.code-copy:hover {
+  background: var(--apx-fill-2);
+  color: var(--apx-label-1);
+}
+
+.code-copy.is-copied {
+  color: var(--apx-success);
+}
+
+/* thinking */
+
+.thinking {
+  margin-bottom: 8px;
+}
+
+.thinking summary {
+  cursor: pointer;
+  color: var(--apx-label-3);
+  font-size: var(--apx-text-sm);
+  line-height: var(--apx-leading-sm);
+  list-style: none;
+}
+
+.thinking summary::-webkit-details-marker {
+  display: none;
+}
+
+.thinking summary::before {
+  content: "▸";
+  display: inline-block;
+  width: 14px;
+  color: var(--apx-label-4);
+  transition: transform var(--apx-duration-fast) var(--apx-ease);
+}
+
+.thinking[open] summary::before {
+  transform: rotate(90deg);
+}
+
+.thinking summary:hover {
+  color: var(--apx-label-2);
+}
+
+.thinking-body {
+  margin-top: 6px;
+  padding-left: 14px;
+  color: var(--apx-label-3);
+  font-size: var(--apx-text-sm);
+  line-height: calc(20px * var(--apx-font-scale));
+  white-space: pre-wrap;
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.caret {
+  display: inline-block;
+  width: 7px;
+  height: 15px;
+  background: var(--apx-label-1);
+  vertical-align: text-bottom;
+  animation: blink 1.05s steps(2, start) infinite;
+}
+
+@keyframes blink {
+  to {
+    visibility: hidden;
+  }
+}
+
+/* tool cards */
+
+.tool {
+  border: 0.5px solid var(--apx-hairline-2);
+  border-radius: var(--apx-radius-sm);
+  background: transparent;
+  overflow: hidden;
+}
+
+.tool:hover {
+  border-color: var(--apx-hairline-3);
+}
+
+.tool-error {
+  border-color: color-mix(in srgb, var(--apx-danger) 40%, transparent);
+}
+
+.tool-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  background: transparent;
+  border: none;
+  padding: 7px 10px;
+  cursor: pointer;
+  text-align: left;
+  color: var(--apx-label-2);
+  font-size: var(--apx-text-sm);
+}
+
+.tool-head:hover {
+  background: var(--apx-row-hover);
+}
+
+.tool-caret {
+  color: var(--apx-label-4);
+  font-size: calc(10px * var(--apx-font-scale));
+  width: 10px;
+}
+
+.tool-name {
+  font-family: var(--apx-font-mono);
+  font-size: calc(12.5px * var(--apx-font-scale));
+  color: var(--apx-label-1);
+  flex: 0 0 auto;
+}
+
+.tool-summary {
+  font-family: var(--apx-font-mono);
+  color: var(--apx-label-3);
+  font-size: calc(12px * var(--apx-font-scale));
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.tool-meta {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--apx-label-4);
+  font-size: calc(11.5px * var(--apx-font-scale));
+  flex: 0 0 auto;
+}
+
+.tool-status.status-running {
+  color: var(--apx-warning);
+}
+
+.tool-status.status-done {
+  color: var(--apx-success);
+}
+
+.tool-status.status-error {
+  color: var(--apx-danger);
+}
+
+.tool-body {
+  border-top: 0.5px solid var(--apx-hairline-1);
+  background: var(--apx-code-bg);
+}
+
+.tool-args,
+.tool-output {
+  margin: 0;
+  padding: 9px 12px;
+  font-family: var(--apx-font-mono);
+  font-size: calc(12px * var(--apx-font-scale));
+  line-height: calc(19px * var(--apx-font-scale));
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.tool-args {
+  color: var(--apx-label-4);
+  border-bottom: 0.5px solid var(--apx-hairline-1);
+}
+
+.tool-output {
+  color: var(--apx-label-2);
+}
+
+/* notices */
+
+.notice {
+  color: var(--apx-label-3);
+  font-size: var(--apx-text-sm);
+  line-height: var(--apx-leading-sm);
+  /* Some notices carry a second line of explanation (a missing session file,
+     for instance). pre-line keeps the break without preserving the runs of
+     spaces that pre-wrap would. */
+  white-space: pre-line;
+  word-break: break-word;
+}
+
+.notice-warn .notice {
+  color: var(--apx-warning);
+}
+
+.notice-error .notice {
+  color: var(--apx-danger);
+}
+
+/* Generating mark: a static ring plus a quarter arc, spun by a `transform`
+   animation. Transform is the only property that animates on the compositor, so
+   this repaints nothing per frame — the opacity-pulsing dot it replaced forced
+   a paint every frame for the same information. */
+.spinner {
+  flex: none;
+  display: inline-flex;
+  animation: spin 900ms linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.working-spinner {
+  color: var(--apx-accent);
+}
+
+/* This turn's elapsed time. Tabular figures so the row never shifts as the
+   digits change, and a muted colour so it reads as metadata next to the label
+   rather than competing with it. */
+.working-elapsed {
+  color: var(--apx-label-3);
+  font-size: calc(12px * var(--apx-font-scale));
+  font-variant-numeric: tabular-nums;
+}
+
+/* -------------------------------------------------------------- composer */
+
+/* Docks above the input: the queue, and (later) the quick-command strip. */
+.composer-area {
+  justify-self: center;
+  width: min(calc(var(--apx-chat-width) + 32px), calc(100% - 48px));
+  margin: 0 0 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+/* Queued steering / follow-up messages. */
+.queue-dock {
+  border: 0.5px solid var(--apx-hairline-2);
+  border-radius: var(--apx-radius-md);
+  background: var(--apx-bg-raised);
+  overflow: hidden;
+}
+
+.queue-dock-head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+  padding: 6px 10px;
+  border: none;
+  background: transparent;
+  color: var(--apx-label-3);
+  font-size: calc(12px * var(--apx-font-scale));
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--apx-duration-fast) linear,
+    color var(--apx-duration-fast) linear;
+}
+
+.queue-dock-head:disabled {
+  cursor: default;
+}
+
+.queue-dock-head:not(:disabled):hover {
+  background: var(--apx-row-hover);
+  color: var(--apx-label-2);
+}
+
+.queue-dock-title {
+  flex: 1;
+  min-width: 0;
+}
+
+.queue-dock-chevron {
+  display: inline-flex;
+  color: var(--apx-label-4);
+}
+
+.queue-dock-list {
+  margin: 0;
+  padding: 0 10px 8px;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  max-height: 160px;
+  overflow-y: auto;
+}
+
+.queue-dock-item {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  font-size: calc(12.5px * var(--apx-font-scale));
+  color: var(--apx-label-2);
+}
+
+.queue-dock-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.queue-tag {
+  flex: none;
+  padding: 0 5px;
+  border-radius: var(--apx-radius-xs);
+  font-size: calc(10.5px * var(--apx-font-scale));
+  line-height: calc(16px * var(--apx-font-scale));
+}
+
+.queue-tag-steer {
+  color: var(--apx-accent);
+  border: 0.5px solid var(--apx-accent-dim);
+}
+
+.queue-tag-follow-up {
+  color: var(--apx-label-3);
+  border: 0.5px solid var(--apx-hairline-3);
+}
+
+.composer {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px 8px 12px;
+  background: var(--apx-input-bg);
+  border: 0.5px solid var(--apx-hairline-2);
+  border-radius: var(--apx-radius-lg);
+}
+
+.composer:focus-within {
+  border-color: var(--apx-hairline-4);
+  box-shadow: var(--apx-shadow-float);
+}
+
+.composer-input {
+  resize: none;
+  background: transparent;
+  border: none;
+  padding: 5px 0;
+  color: var(--apx-label-1);
+  font-family: var(--apx-font);
+  font-size: var(--apx-text);
+  line-height: var(--apx-leading);
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+/* The polish button lives inside the field, so the field needs a positioning
+   context and the input has to reserve the button's width — otherwise a long
+   line runs underneath it. */
+.composer-field {
+  position: relative;
+  display: flex;
+}
+
+.composer-field .composer-input {
+  flex: 1;
+  min-width: 0;
+  padding-right: 30px;
+}
+
+/* Icon-only, anchored to the field's bottom-right so it tracks the textarea as
+   it grows. Muted at rest: it is a helper, not a primary action. */
+.composer-enhance {
+  position: absolute;
+  right: 0;
+  bottom: 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: none;
+  border-radius: var(--apx-radius-xs);
+  background: transparent;
+  color: var(--apx-label-3);
+  cursor: pointer;
+  transition: background var(--apx-duration-fast) linear,
+    color var(--apx-duration-fast) linear;
+}
+
+.composer-enhance:hover:not(:disabled) {
+  background: var(--apx-fill-2);
+  color: var(--apx-accent);
+}
+
+.composer-enhance:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* Failure line sits under the field it belongs to: a transcript notice would
+   scroll away and read as something the assistant said. */
+.composer-status {
+  margin: 0;
+  font-size: calc(11.5px * var(--apx-font-scale));
+  line-height: calc(16px * var(--apx-font-scale));
+  color: var(--apx-danger);
+}
+
+.composer-input:focus {
+  outline: none;
+}
+
+.composer-input:disabled {
+  opacity: 0.5;
+}
+
+.composer-input::placeholder {
+  color: var(--apx-label-4);
+}
+
+.composer-actions {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  padding-bottom: 1px;
+}
+
+/* ------------------------------------------------------------- event log */
+
+.events {
+  border-left: 0.5px solid var(--apx-hairline-3);
+  background: var(--apx-sidebar-bg);
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  min-height: 0;
+}
+
+.events-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-bottom: 0.5px solid var(--apx-hairline-3);
+}
+
+.events-title {
+  font-size: calc(11.5px * var(--apx-font-scale));
+  font-weight: 500;
+  color: var(--apx-label-3);
+}
+
+.events-count {
+  color: var(--apx-link);
+  font-size: calc(11px * var(--apx-font-scale));
+}
+
+.events-spacer {
+  flex: 1;
+}
+
+.events-body {
+  overflow-y: auto;
+  padding: 8px 10px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.event {
+  display: grid;
+  grid-template-columns: 50px minmax(0, 1fr);
+  gap: 8px;
+  font-family: var(--apx-font-mono);
+  font-size: calc(11px * var(--apx-font-scale));
+  line-height: calc(16px * var(--apx-font-scale));
+}
+
+.event-tag {
+  color: var(--apx-label-4);
+  font-size: calc(10px * var(--apx-font-scale));
+  text-align: right;
+}
+
+.event-text {
+  color: var(--apx-label-3);
+  word-break: break-all;
+  white-space: pre-wrap;
+}
+
+.event-record .event-tag {
+  color: var(--apx-accent-soft);
+}
+
+.event-stderr .event-text,
+.event-stderr .event-tag {
+  color: var(--apx-warning);
+}
+
+.event-app .event-text {
+  color: var(--apx-label-2);
+}
+
+.event-ui .event-tag {
+  color: var(--apx-accent-weak);
+}
+
+/* ------------------------------------------------------------- statusbar */
+
+.statusbar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-height: 30px;
+  padding: 4px 14px;
+  background: var(--apx-sidebar-bg);
+  border-top: 0.5px solid var(--apx-hairline-3);
+  font-size: calc(11.5px * var(--apx-font-scale));
+  color: var(--apx-label-4);
+}
+
+.status-item b {
+  color: var(--apx-label-2);
+  font-weight: 500;
+}
+
+.status-num {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Context pressure meter. */
+.meter {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.meter-track {
+  position: relative;
+  width: 76px;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--apx-fill-2);
+  overflow: hidden;
+}
+
+.meter-fill {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--apx-accent);
+  transition: width var(--apx-duration) var(--apx-ease-out);
+}
+
+.meter-value {
+  min-width: 62px;
+  font-variant-numeric: tabular-nums;
+  color: var(--apx-label-3);
+}
+
+/* Past the heat threshold the bar burns: a drifting amber→red gradient, a warm
+   glow, and a flicker. Decorative only — the number beside it is the truth. */
+.meter.is-hot .meter-track {
+  overflow: visible;
+}
+
+.meter.is-hot .meter-fill {
+  background-image: linear-gradient(
+    90deg,
+    var(--apx-warning) 0%,
+    var(--apx-danger) 45%,
+    var(--apx-warning) 100%
+  );
+  background-size: 200% 100%;
+  box-shadow: 0 0 10px color-mix(in srgb, var(--apx-warning) 70%, transparent);
+  animation: flame-drift 1.6s linear infinite, flame-flicker 0.9s ease-in-out infinite;
+}
+
+.meter.is-hot .meter-track::after {
+  content: "";
+  position: absolute;
+  inset: auto 0 100% 0;
+  height: 9px;
+  background: radial-gradient(
+    70% 100% at 50% 100%,
+    color-mix(in srgb, var(--apx-warning) 50%, transparent),
+    transparent 72%
+  );
+  filter: blur(3px);
+  pointer-events: none;
+  animation: flame-flicker 1.1s ease-in-out infinite;
+}
+
+.meter.is-hot .meter-value {
+  color: var(--apx-warning);
+}
+
+@keyframes flame-drift {
+  to {
+    background-position: 100% 0;
+  }
+}
+
+@keyframes flame-flicker {
+  0%,
+  100% {
+    opacity: 0.7;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+.spacer {
+  flex: 1;
+}
+
+/* ------------------------------------------------------- segmented control */
+
+.segmented {
+  position: relative;
+  display: inline-grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  gap: 2px;
+  padding: 2px;
+  background: var(--apx-fill-2);
+  border-radius: var(--apx-radius-sm);
+}
+
+.segmented-thumb {
+  position: absolute;
+  top: 2px;
+  bottom: 2px;
+  left: 2px;
+  width: calc((100% - 4px - (var(--seg-count) - 1) * 2px) / var(--seg-count));
+  border-radius: calc(var(--apx-radius-sm) - 2px);
+  background: var(--apx-bg-raised-3);
+  box-shadow: 0 1px 3px rgb(0 0 0 / 22%);
+  transform: translateX(calc(var(--seg-index) * (100% + 2px)));
+  transition: transform var(--apx-duration) var(--apx-ease-spring);
+}
+
+.segmented-item {
+  position: relative;
+  z-index: 1;
+  padding: 4px 16px;
+  border: none;
+  border-radius: calc(var(--apx-radius-sm) - 2px);
+  background: transparent;
+  color: var(--apx-label-2);
+  font-size: calc(12.5px * var(--apx-font-scale));
+  cursor: pointer;
+  transition: color var(--apx-duration-fast) linear;
+}
+
+.segmented-item:hover {
+  color: var(--apx-label-1);
+}
+
+.segmented-item.is-active {
+  color: var(--apx-label-1);
+}
+
+.status-spacer {
+  flex: 1;
+}
+
+.status-workdir {
+  font-family: var(--apx-font-mono);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 46vw;
+  color: var(--apx-label-3);
+}
+
+.status-busy.is-busy {
+  color: var(--apx-accent-soft);
+}
+
+/* ------------------------------------------------------- toolbar breadcrumb */
+
+.crumbs {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+
+.crumb {
+  color: var(--apx-label-3);
+  font-size: calc(13px * var(--apx-font-scale));
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 260px;
+}
+
+.crumb-active {
+  color: var(--apx-label-1);
+}
+
+.crumb-sep {
+  color: var(--apx-label-4);
+  font-size: calc(12px * var(--apx-font-scale));
+}
+
+/* --------------------------------------------------------- command strip */
+
+.command-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.cmd-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border: 0.5px solid var(--apx-hairline-2);
+  border-radius: var(--apx-radius-sm);
+  background: transparent;
+  color: var(--apx-label-2);
+  font-size: calc(12.5px * var(--apx-font-scale));
+  cursor: pointer;
+  transition: background var(--apx-duration-fast) linear,
+    border-color var(--apx-duration-fast) linear, color var(--apx-duration-fast) linear;
+}
+
+.cmd-btn:hover:not(:disabled) {
+  background: var(--apx-fill-2);
+  color: var(--apx-label-1);
+}
+
+/* Dimmed, not just un-clickable. `cursor: default` alone is invisible until the
+   pointer is already on the button, which is how a dead button still gets
+   pressed — and the reason it cannot be pressed lives in this button's tooltip,
+   so the disabled state also has to stay hoverable. Chrome dispatches no mouse
+   events for a disabled control and does not retarget them to the parent, so
+   `pointer-events: none` is what hands the hover back to the tooltip host.
+   Without it the explanation would be unreachable. */
+.cmd-btn:disabled {
+  color: var(--apx-label-4);
+  border-color: var(--apx-hairline-1);
+  cursor: default;
+  pointer-events: none;
+}
+
+.cmd-btn.is-running {
+  opacity: 0.6;
+}
+
+/* Cooling: a slow blue breath that says "press this to bring it down". */
+.cmd-btn.is-hot {
+  color: var(--apx-accent-soft);
+  border-color: color-mix(in srgb, var(--apx-accent) 45%, transparent);
+  background: color-mix(in srgb, var(--apx-accent) 12%, transparent);
+  animation: cool-breathe 2.6s ease-in-out infinite;
+}
+
+.cmd-btn.is-hot:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--apx-accent) 22%, transparent);
+  color: var(--apx-label-1);
+}
+
+@keyframes cool-breathe {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--apx-accent) 0%, transparent);
+  }
+  50% {
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--apx-accent) 16%, transparent);
+  }
+}
+
+.cmd-hint {
+  color: var(--apx-label-4);
+  font-size: calc(11.5px * var(--apx-font-scale));
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* --------------------------------------------------- rail: workspaces/chats */
+/*
+ * Grouped tree. Metrics mirror dsh's workspace browser rows: a 34px workspace
+ * header, 32px session rows, a 16px leading slot on every row so folder glyphs
+ * and state dots share a column, 2px between rows of a group and 4px between
+ * groups. Session rows are one nesting step in, which is the reference's own
+ * group indent expressed as a custom property on the group body.
+ */
+
+.rail-head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 36px;
+  padding-left: 4px;
+  margin-bottom: 4px;
+}
+
+.rail-section-label {
+  color: var(--apx-label-3);
+  font-size: calc(11.5px * var(--apx-font-scale));
+  font-weight: 500;
+}
+
+.rail-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.rail-group {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+/* The row indent lives on the container, so a nested level only has to change
+   this one value — the same mechanism the reference uses. */
+.rail-sessions {
+  --apx-group-indent: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.rail-group-head,
+.rail-chat {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: var(--apx-radius-sm);
+  padding: 0 8px;
+  padding-inline-start: calc(8px + var(--apx-group-indent, 0px));
+  cursor: pointer;
+  user-select: none;
+  color: var(--apx-label-2);
+}
+
+.rail-group-head {
+  height: 34px;
+}
+
+.rail-chat {
+  height: 32px;
+  gap: 0;
+}
+
+.rail-group-head:hover,
+.rail-chat:hover {
+  background: var(--apx-nav-hover);
+}
+
+.rail-chat.is-active {
+  background: var(--apx-nav-active);
+}
+
+.rail-group-head.is-active .rail-group-title {
+  color: var(--apx-label-1);
+}
+
+.rail-chat.is-active .rail-chat-title {
+  color: var(--apx-label-1);
+}
+
+/* Leading slot: identical geometry on both row kinds, so the folder and the
+   state dot line up. */
+.rail-slot {
+  flex: none;
+  width: 16px;
+  height: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--apx-label-4);
+}
+
+/* Folder at rest, expand arrow on hover — an in-place swap, so the title never
+   shifts when the pointer enters the row. */
+.rail-group-head .rail-arrow {
+  display: none;
+}
+
+.rail-group-head:hover .rail-arrow {
+  display: inline-flex;
+}
+
+.rail-group-head:hover .rail-folder {
+  display: none;
+}
+
+.rail-arrow-glyph {
+  transition: transform var(--apx-duration-fast) linear;
+}
+
+.rail-arrow-glyph.is-open {
+  transform: rotate(90deg);
+}
+
+/* The tooltip wrapper replaces the title element, so it has to take the title's
+   place in the flex row. */
+.rail-group-head .tip-host {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+}
+
+.rail-group-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: calc(14px * var(--apx-font-scale));
+  line-height: 20px;
+  font-weight: 500;
+}
+
+.rail-chat-title {
+  flex: 1;
+  min-width: 0;
+  margin: 0 6px 0 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: calc(13.5px * var(--apx-font-scale));
+  line-height: 20px;
+  color: var(--apx-label-3);
+}
+
+.rail-dot-glyph {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  border: 1px solid var(--apx-label-4);
+}
+
+.rail-chat.is-active .rail-dot-glyph {
+  background: var(--apx-accent);
+  border-color: var(--apx-accent);
+}
+
+/* Trailing cell: the same slot the hover actions take over. */
+.rail-chat-meta {
+  flex: none;
+  font-size: calc(10px * var(--apx-font-scale));
+  line-height: 16px;
+  color: var(--apx-label-4);
+}
+
+.rail-chat:hover .rail-chat-meta {
+  display: none;
+}
+
+.rail-row-actions {
+  flex: none;
+  display: none;
+  align-items: center;
+  gap: 1px;
+}
+
+.rail-group-head:hover .rail-row-actions,
+.rail-chat:hover .rail-row-actions,
+.rail-group-head.is-renaming .rail-row-actions,
+.rail-chat.is-renaming .rail-row-actions {
+  display: flex;
+}
+
+.rail-row-actions .icon-btn {
+  width: 22px;
+  height: 22px;
+}
+
+.rail-chat.is-renaming {
+  gap: 0;
+}
+
+.rail-rename {
+  flex: 1;
+  min-width: 0;
+  height: 24px;
+  margin: 0;
+  padding: 0 6px;
+  font-size: calc(12.5px * var(--apx-font-scale));
+  border-radius: var(--apx-radius-xs);
+}
+
+/* Only the "no workspaces at all" note uses this now: an individual workspace
+   with no sessions renders nothing, so there is no indented variant left. */
+.rail-empty {
+  margin: 0;
+  padding: 6px 8px;
+  color: var(--apx-label-4);
+  font-size: calc(12px * var(--apx-font-scale));
+  line-height: 18px;
+}
+
+.rail-foot {
+  flex: none;
+  margin-top: auto;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding-top: 10px;
+  border-top: 0.5px solid var(--apx-hairline-1);
+}
+
+.rail-foot-item {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 10px;
+  border: none;
+  border-radius: var(--apx-radius-sm);
+  background: transparent;
+  color: var(--apx-label-3);
+  font-size: calc(13px * var(--apx-font-scale));
+  cursor: pointer;
+  transition: background var(--apx-duration-fast) linear,
+    color var(--apx-duration-fast) linear;
+}
+
+.rail-foot-item:hover {
+  background: var(--apx-nav-hover);
+  color: var(--apx-label-1);
+}
+
+.rail-manual {
+  display: grid;
+  gap: 5px;
+}
+
+.rail-manual-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.rail-link {
+  align-self: flex-start;
+  padding: 2px 0;
+  border: none;
+  background: transparent;
+  color: var(--apx-label-4);
+  font-size: calc(11px * var(--apx-font-scale));
+  cursor: pointer;
+}
+
+.rail-link:hover {
+  color: var(--apx-link);
+}
+
+.rail-error {
+  margin: 0;
+  font-size: calc(11px * var(--apx-font-scale));
+  line-height: calc(15px * var(--apx-font-scale));
+  color: var(--apx-danger);
+}
+
+/* ------------------------------------------------- composer pickers/popover */
+
+.composer-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.picker-key {
+  color: var(--apx-label-4);
+  font-size: calc(11px * var(--apx-font-scale));
+}
+
+.picker-value {
+  color: var(--apx-label-2);
+  font-family: var(--apx-font-mono);
+  font-size: calc(11.5px * var(--apx-font-scale));
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.popover {
+  position: relative;
+  flex: none;
+}
+
+.popover-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  border: none;
+  border-radius: var(--apx-radius-sm);
+  background: transparent;
+  color: var(--apx-label-3);
+  font-size: calc(11.5px * var(--apx-font-scale));
+  cursor: pointer;
+  transition: background var(--apx-duration-fast) linear,
+    color var(--apx-duration-fast) linear;
+}
+
+.popover-trigger:hover:not(:disabled) {
+  background: var(--apx-fill-2);
+  color: var(--apx-label-2);
+}
+
+.popover-trigger:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.popover-panel {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  z-index: 30;
+  width: 340px;
+  max-height: 340px;
+  display: flex;
+  flex-direction: column;
+  background: var(--apx-bg-raised);
+  border: 0.5px solid var(--apx-hairline-3);
+  border-radius: var(--apx-radius-md);
+  overflow: hidden;
+  outline: none;
+}
+
+.popover-left {
+  left: 0;
+}
+
+.popover-right {
+  right: 0;
+}
+
+.popover-search-row {
+  padding: 8px 8px 6px;
+  border-bottom: 0.5px solid var(--apx-hairline-1);
+}
+
+.popover-search {
+  width: 100%;
+  background: var(--apx-field-bg);
+  border: 0.5px solid var(--apx-hairline-2);
+  border-radius: var(--apx-radius-sm);
+  padding: 5px 8px;
+  color: var(--apx-label-1);
+  font-size: calc(12px * var(--apx-font-scale));
+}
+
+.popover-search:focus {
+  outline: none;
+  border-color: var(--apx-accent);
+  box-shadow: 0 0 0 3px var(--apx-accent-subtle);
+}
+
+.popover-list {
+  overflow-y: auto;
+  padding: 5px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.popover-list-short {
+  width: 150px;
+}
+
+.popover-item {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 6px 8px;
+  border: none;
+  border-radius: var(--apx-radius-sm);
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.popover-item:hover {
+  background: var(--apx-fill-2);
+}
+
+.popover-item.is-active {
+  background: var(--apx-nav-active);
+}
+
+.popover-item-name {
+  color: var(--apx-label-1);
+  font-family: var(--apx-font-mono);
+  font-size: calc(12.5px * var(--apx-font-scale));
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.popover-list-short .popover-item-name {
+  font-family: var(--apx-font);
+}
+
+.popover-item-sub {
+  color: var(--apx-label-4);
+  font-size: calc(11px * var(--apx-font-scale));
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.popover-empty {
+  margin: 0;
+  padding: 14px 8px;
+  text-align: center;
+  color: var(--apx-label-4);
+  font-size: calc(12px * var(--apx-font-scale));
+}
+
+
+/* ==========================================================================
+   Tooltips
+   The native `title` tooltip is drawn by the OS: system font, its own grey
+   box, no theme awareness. Everything here exists to replace it.
+   ========================================================================== */
+
+.tip-host {
+  display: inline-flex;
+  min-width: 0;
+}
+
+.tip-host-block {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+}
+
+.tip {
+  position: fixed;
+  z-index: 200;
+  max-width: 320px;
+  padding: 7px 10px;
+  border-radius: var(--apx-radius-md);
+  background: var(--apx-tip-bg);
+  border: 0.5px solid var(--apx-hairline-3);
+  box-shadow: var(--apx-shadow-float);
+  color: var(--apx-label-1);
+  font-family: var(--apx-font);
+  font-size: calc(12px * var(--apx-font-scale));
+  line-height: calc(17px * var(--apx-font-scale));
+  font-weight: 400;
+  white-space: pre-line;
+  pointer-events: none;
+  animation: tip-in var(--apx-duration) var(--apx-ease-out);
+}
+
+.tip-wide {
+  max-width: 300px;
+  white-space: pre-line;
+}
+
+.tip-turn-no {
+  display: block;
+  margin-bottom: 2px;
+  color: var(--apx-label-4);
+  font-size: calc(11px * var(--apx-font-scale));
+}
+
+@keyframes tip-in {
+  from {
+    opacity: 0;
+    transform: translateY(2px) scale(0.985);
+  }
+}
+
+[data-reduce-motion="true"] .tip {
+  animation: none;
+}
+
+/* ==========================================================================
+   Transcript: right-hand turn rail
+   ========================================================================== */
+
+.transcript-wrap {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  min-height: 0;
+  min-width: 0;
+  position: relative;
+}
+
+.transcript-wrap > .transcript {
+  min-height: 0;
+  min-width: 0;
+}
+
+.turn-rail {
+  position: relative;
+  width: 26px;
+  margin: 12px 8px 12px 0;
+  border-radius: 999px;
+  background: linear-gradient(
+    to bottom,
+    transparent,
+    var(--apx-hairline-1) 12%,
+    var(--apx-hairline-1) 88%,
+    transparent
+  );
+}
+
+.turn-tick {
+  position: absolute;
+  right: 6px;
+  width: 13px;
+  height: 2.5px;
+  padding: 0;
+  border: none;
+  border-radius: 999px;
+  background: var(--apx-label-4);
+  opacity: 0.5;
+  cursor: pointer;
+  transform: translateY(-50%);
+  transition: opacity var(--apx-duration-fast) linear,
+    background-color var(--apx-duration-fast) linear,
+    width var(--apx-duration) var(--apx-ease);
+}
+
+.turn-tick:hover {
+  width: 19px;
+  opacity: 1;
+  background: var(--apx-label-1);
+}
+
+.turn-tick.is-active {
+  width: 19px;
+  opacity: 1;
+  background: var(--apx-accent);
+  box-shadow: 0 0 0 3px var(--apx-accent-subtle);
+}
+
+/* ==========================================================================
+   Per-turn actions (copy / edit / delete on a user prompt)
+   ========================================================================== */
+
+/*
+ * Parked just outside the bubble's left edge. A right-aligned bubble always has
+ * clear space there, and being absolutely positioned means the toolbar never
+ * eats into the bubble's width or pushes it away from the right margin.
+ */
+.turn-actions {
+  position: absolute;
+  right: 100%;
+  top: 50%;
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  margin-right: 6px;
+  opacity: 0;
+  transform: translate(4px, -50%);
+  transition: opacity var(--apx-duration-fast) linear,
+    transform var(--apx-duration-fast) var(--apx-ease-out);
+}
+
+.row-user:hover .turn-actions,
+.row-user:focus-within .turn-actions {
+  opacity: 1;
+  transform: translate(0, -50%);
+}
+
+.turn-actions .icon-btn {
+  width: 24px;
+  height: 24px;
+}
+
+/* ==========================================================================
+   Confirm dialog
+   ========================================================================== */
+
+.confirm-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
+
+.confirm-scrim {
+  position: absolute;
+  inset: 0;
+  border: none;
+  padding: 0;
+  background: var(--apx-scrim-strong);
+  backdrop-filter: blur(2px);
+  cursor: default;
+  animation: fade-in var(--apx-duration) var(--apx-ease-out);
+}
+
+.confirm {
+  position: relative;
+  width: min(430px, 100%);
+  padding: 18px 20px 16px;
+  border-radius: var(--apx-radius-lg);
+  background: var(--apx-bg-raised);
+  border: 0.5px solid var(--apx-hairline-3);
+  box-shadow: var(--apx-shadow-float);
+  animation: confirm-in var(--apx-duration-slow) var(--apx-ease-spring);
+}
+
+@keyframes confirm-in {
+  from {
+    opacity: 0;
+    transform: scale(0.96) translateY(6px);
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+.confirm-title {
+  margin: 0 0 8px;
+  font-size: calc(14px * var(--apx-font-scale));
+  font-weight: 600;
+  color: var(--apx-label-1);
+}
+
+.confirm-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: calc(12.5px * var(--apx-font-scale));
+  line-height: calc(19px * var(--apx-font-scale));
+  color: var(--apx-label-2);
+}
+
+.confirm-body p {
+  margin: 0;
+}
+
+.confirm-note {
+  color: var(--apx-label-4);
+  font-size: calc(11.5px * var(--apx-font-scale));
+}
+
+.confirm-foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+[data-reduce-motion="true"] .confirm,
+[data-reduce-motion="true"] .confirm-scrim {
+  animation: none;
+}
+
+/* ------------------------------------------------- composer: skills switches */
+
+/* The popover that holds a conversation's skill switches. The panel itself is
+   widened (.popover-panel-skills) because it clips: content wider than the
+   panel loses its right edge — that is how the add-plus disappeared once. */
+.skills-popover {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+}
+
+.popover-panel-skills {
+  width: 400px;
+}
+
+.skills-popover-head {
+  margin: 0;
+  padding: 0 6px;
+  font-size: calc(11px * var(--apx-font-scale));
+  line-height: calc(16px * var(--apx-font-scale));
+  color: var(--apx-label-4);
+}
+
+.skills-popover-head {
+  padding-top: 4px;
+  border-top: 0.5px solid var(--apx-hairline-1);
+}
+
+/* 「本会话常驻skills」+ 常驻加号。标题占满剩余宽度，加号贴右，两者在同一基线上。 */
+.skills-popover-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 3px 0 6px;
+}
+
+.skills-popover-title {
+  flex: 1;
+  min-width: 0;
+  font-size: calc(11.5px * var(--apx-font-scale));
+  line-height: calc(17px * var(--apx-font-scale));
+  color: var(--apx-label-2);
+}
+
+/* 加号背后的「已安装的 skill」列表。继承 .popover-list 的滚动，宽度跟父级走
+   ——旧的 .popover-list-short 只有 150px，名字全在那儿被截掉。 */
+.skills-picker {
+  max-height: 216px;
+}
+
+.skills-popover-list {
+  max-height: 260px;
+}
+
+.skill-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 6px 6px 8px;
+  border-radius: var(--apx-radius-sm);
+}
+
+.skill-row:hover {
+  background: var(--apx-nav-hover);
+}
+
+.skill-row-copy {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.skill-row-name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  font-size: calc(13px * var(--apx-font-scale));
+  color: var(--apx-label-1);
+  /* 换行而不是省略号：这里的名字就是用户认 skill 的唯一依据，切掉就等于
+     分不清加的是哪一个。 */
+  overflow-wrap: anywhere;
+}
+
+/* 常用 / 内置 markers. Muted on purpose: they qualify the name, they are not
+   the row's subject. */
+.skill-row-tag {
+  flex: none;
+  padding: 0 5px;
+  border: 0.5px solid transparent;
+  border-radius: 999px;
+  background: var(--apx-amber-weak);
+  color: var(--apx-amber-label);
+  font-size: calc(10px * var(--apx-font-scale));
+  line-height: 15px;
+}
+
+.skill-row-tag.is-muted {
+  background: transparent;
+  border-color: var(--apx-hairline-2);
+  color: var(--apx-label-4);
+}
+
+.skill-row-desc {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  font-size: calc(11px * var(--apx-font-scale));
+  line-height: calc(15px * var(--apx-font-scale));
+  color: var(--apx-label-4);
+}

@@ -1,0 +1,46 @@
+{
+  "name": "apix",
+  "private": true,
+  "version": "0.1.0",
+  "description": "APIX - a lightweight desktop coding agent built on pi",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "icon": "tauri icon app-icon.png",
+    "tauri": "tauri",
+    "app:dev": "tauri dev",
+    "app:build": "tauri build",
+    "app:deploy": "tauri build && node scripts/deploy.mjs",
+    "app:copy": "node scripts/deploy.mjs",
+    "check:rich": "node scripts/check-rich.mjs",
+    "check:rail": "node scripts/check-rail.mjs",
+    "check:duration": "node scripts/check-duration.mjs",
+    "check:recovery": "node scripts/check-session-recovery.mjs",
+    "check:persistence": "node scripts/check-persistence.mjs",
+    "check:backdrops": "node scripts/check-backdrops.mjs",
+    "check:skills": "node scripts/check-skills.mjs",
+    "check:reload": "node scripts/check-reload.mjs",
+    "check:theme-ink": "node scripts/check-theme-ink.mjs",
+    "check:newchat": "node scripts/check-newchat.mjs",
+    "check:builtin-skills": "node scripts/check-builtin-skills.mjs"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^2.1.1",
+    "@tauri-apps/plugin-dialog": "^2.8.1",
+    "@tauri-apps/plugin-opener": "^2.7.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "three": "^0.186.1"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.1.0",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@types/three": "^0.186.0",
+    "@vitejs/plugin-react": "^4.3.4",
+    "typescript": "^5.6.3",
+    "vite": "^5.4.11"
+  }
+}

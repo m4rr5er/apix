@@ -1,0 +1,54 @@
+[package]
+name = "apix"
+version = "0.1.0"
+description = "APIX - a lightweight desktop coding agent built on pi"
+authors = ["APIX"]
+edition = "2021"
+rust-version = "1.77.2"
+
+[lib]
+name = "apix_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+# See the note on the indexmap entry under [dependencies].
+indexmap = { version = "1.9", default-features = false, features = ["std"] }
+
+[dependencies]
+tauri = { version = "2", features = ["tray-icon"] }
+tauri-plugin-single-instance = "2"
+tauri-plugin-dialog = "2"
+# Opens http(s) links from assistant output in the system browser. The
+# `open_path` command can't do this — it shells out to explorer.exe, which only
+# reveals filesystem paths.
+tauri-plugin-opener = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# Not used by APIX directly. `indexmap 1.9.3` declares no `default` feature, so
+# its build script falls back to an autocfg sysroot probe to decide whether
+# `std` is available. Where that probe cannot run (sandboxed / restricted build
+# environments) the probe fails silently, `cfg(has_std)` is never emitted, and
+# `schemars 0.8` fails with E0107 on `IndexMap<K, V>`. Enabling the feature here
+# forces the build script's deterministic `CARGO_FEATURE_STD` branch instead.
+# Declared under both [dependencies] and [build-dependencies] because resolver
+# v2 resolves their features independently.
+indexmap = { version = "1.9", default-features = false, features = ["std"] }
+tokio = { version = "1", features = [
+  "process",
+  "io-util",
+  "sync",
+  "time",
+  "rt",
+  "rt-multi-thread",
+  "macros",
+] }
+
+[profile.release]
+# Thin LTO keeps the release build in the minutes rather than tens of minutes
+# while costing only a little size over `lto = true`. Switch to `lto = true`
+# with `codegen-units = 1` if the last megabyte matters more than the wait.
+codegen-units = 16
+lto = "thin"
+opt-level = "s"
+strip = true
