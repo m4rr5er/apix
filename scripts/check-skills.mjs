@@ -391,8 +391,8 @@ function main() {
     setter.replace(/\s+/g, " ").slice(0, 120),
   );
   check(
-    "补建的会话随即被打开（和首条消息的创建路径一致，绑定到真实 session）",
-    setter.includes("openChat"),
+    "补建的会话随即被聚焦（focus 打开它的专属引擎，和首条消息的创建路径一致）",
+    setter.includes("focus("),
   );
   const nameRule = /\.skill-row-name\s*\{([^}]*)\}/.exec(css)?.[1] ?? "";
   check(

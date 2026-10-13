@@ -1,9 +1,9 @@
 use serde_json::Value;
 use tauri::{AppHandle, Manager, State};
 
-use crate::pi::{PiHandle, PiLocation};
+use crate::pi::{PiLocation, PiRegistry};
 
-/// Spawn (or restart) the `pi --mode rpc` engine.
+/// Spawn (or restart) the `pi --mode rpc` engine for one conversation slot.
 ///
 /// `skills` is the conversation's skill allowlist, as SKILL.md paths. Passing it
 /// switches the engine to "only these skills exist"; passing `None` leaves pi's
@@ -15,49 +15,79 @@ use crate::pi::{PiHandle, PiLocation};
 #[tauri::command]
 pub async fn pi_start(
     app: AppHandle,
-    pi: State<'_, PiHandle>,
+    registry: State<'_, PiRegistry>,
+    slot: String,
     cwd: Option<String>,
     skills: Option<Vec<String>>,
     session: Option<String>,
 ) -> Result<PiLocation, String> {
-    pi.start(app, cwd, skills, session).await
+    let handle = registry.get_or_create(&slot);
+    handle.start(app, cwd, skills, session).await
 }
 
-/// Escape hatch: send a raw RPC command record.
+/// Escape hatch: send a raw RPC command record to one slot's engine.
 #[tauri::command]
-pub async fn pi_send(pi: State<'_, PiHandle>, command: Value) -> Result<(), String> {
-    pi.send(command).await
+pub async fn pi_send(
+    registry: State<'_, PiRegistry>,
+    slot: String,
+    command: Value,
+) -> Result<(), String> {
+    let handle = registry
+        .get(&slot)
+        .ok_or_else(|| format!("槽位 {slot} 没有引擎"))?;
+    handle.send(command).await
 }
 
 /// Convenience wrapper for the `prompt` command.
 #[tauri::command]
 pub async fn pi_prompt(
-    pi: State<'_, PiHandle>,
+    registry: State<'_, PiRegistry>,
+    slot: String,
     message: String,
     streaming_behavior: Option<String>,
 ) -> Result<(), String> {
+    let handle = registry
+        .get(&slot)
+        .ok_or_else(|| format!("槽位 {slot} 没有引擎"))?;
     let mut command = serde_json::json!({ "type": "prompt", "message": message });
     if let Some(behavior) = streaming_behavior {
         if let Some(map) = command.as_object_mut() {
             map.insert("streamingBehavior".to_string(), Value::String(behavior));
         }
     }
-    pi.send(command).await
+    handle.send(command).await
 }
 
 #[tauri::command]
-pub async fn pi_abort(pi: State<'_, PiHandle>) -> Result<(), String> {
-    pi.send(serde_json::json!({ "type": "abort" })).await
+pub async fn pi_abort(registry: State<'_, PiRegistry>, slot: String) -> Result<(), String> {
+    let handle = registry
+        .get(&slot)
+        .ok_or_else(|| format!("槽位 {slot} 没有引擎"))?;
+    handle.send(serde_json::json!({ "type": "abort" })).await
 }
 
 #[tauri::command]
-pub async fn pi_stop(app: AppHandle, pi: State<'_, PiHandle>) -> Result<(), String> {
-    pi.stop(Some(app)).await
+pub async fn pi_stop(
+    app: AppHandle,
+    registry: State<'_, PiRegistry>,
+    slot: String,
+) -> Result<(), String> {
+    if let Some(handle) = registry.get(&slot) {
+        handle.stop(Some(app)).await?;
+    }
+    registry.remove(&slot);
+    Ok(())
 }
 
 #[tauri::command]
-pub async fn pi_status(pi: State<'_, PiHandle>) -> Result<Value, String> {
-    Ok(pi.status().await)
+pub async fn pi_status(
+    registry: State<'_, PiRegistry>,
+    slot: String,
+) -> Result<Value, String> {
+    match registry.get(&slot) {
+        Some(handle) => Ok(handle.status().await),
+        None => Ok(serde_json::json!({ "running": false })),
+    }
 }
 
 /// Default working directory offered by the UI on first launch.

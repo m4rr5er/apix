@@ -4,7 +4,7 @@ mod pi;
 
 use std::sync::Mutex;
 
-use pi::PiHandle;
+use pi::PiRegistry;
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{Emitter, Manager, PhysicalPosition, WindowEvent};
 
@@ -117,7 +117,7 @@ pub fn run() {
         }))
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
-        .manage(PiHandle::new())
+        .manage(PiRegistry::default())
         .manage(TrayCursor(Mutex::new(None)))
         .invoke_handler(tauri::generate_handler![
             commands::pi_start,
@@ -202,8 +202,13 @@ pub fn run() {
         .expect("failed to build APIX")
         .run(|app, event| {
             if let tauri::RunEvent::ExitRequested { .. } = event {
-                if let Some(pi) = app.try_state::<PiHandle>() {
-                    let _ = tauri::async_runtime::block_on(pi.stop(None));
+                // Every conversation slot has its own child; all of them must
+                // go through the orderly stdin-shutdown path, not just the one
+                // on screen.
+                if let Some(registry) = app.try_state::<PiRegistry>() {
+                    for handle in registry.all() {
+                        let _ = tauri::async_runtime::block_on(handle.stop(None));
+                    }
                 }
             }
         });

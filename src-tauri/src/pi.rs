@@ -210,14 +210,64 @@ struct PiInner {
     gen: u64,
 }
 
-/// Owns the single `pi --mode rpc` child process backing the window.
+/// Owns one `pi --mode rpc` child process for one conversation slot.
+///
+/// The slot is part of the handle, not a parameter of each call, because every
+/// event the process produces must carry it: with several conversations alive
+/// at once, the frontend routes records by slot, and an untagged event from a
+/// background engine would corrupt the chat on screen.
 pub struct PiHandle {
+    slot: String,
     inner: Arc<Mutex<PiInner>>,
 }
 
+/// All live engines, keyed by conversation slot.
+#[derive(Default)]
+pub struct PiRegistry {
+    slots: std::sync::Mutex<std::collections::HashMap<String, Arc<PiHandle>>>,
+}
+
+impl PiRegistry {
+    /// The handle for `slot`, spawning its entry on first use. The entry is a
+    /// handle without a process yet — `start` fills it.
+    pub fn get_or_create(&self, slot: &str) -> Arc<PiHandle> {
+        let mut guard = self.slots.lock().unwrap_or_else(|p| p.into_inner());
+        guard
+            .entry(slot.to_string())
+            .or_insert_with(|| Arc::new(PiHandle::for_slot(slot.to_string())))
+            .clone()
+    }
+
+    pub fn get(&self, slot: &str) -> Option<Arc<PiHandle>> {
+        self.slots
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .get(slot)
+            .cloned()
+    }
+
+    /// Drop the slot's entry (after stopping it) so a reopened chat starts clean.
+    pub fn remove(&self, slot: &str) {
+        self.slots
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .remove(slot);
+    }
+
+    pub fn all(&self) -> Vec<Arc<PiHandle>> {
+        self.slots
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .values()
+            .cloned()
+            .collect()
+    }
+}
+
 impl PiHandle {
-    pub fn new() -> Self {
+    pub fn for_slot(slot: String) -> Self {
         Self {
+            slot,
             inner: Arc::new(Mutex::new(PiInner {
                 child: None,
                 stdin: None,
@@ -344,15 +394,16 @@ impl PiHandle {
             EVT_STATUS,
             json!({
                 "state": "running",
+                "slot": self.slot,
                 "cwd": workdir.to_string_lossy(),
                 "location": location,
                 "gen": gen,
             }),
         );
 
-        spawn_record_reader(app.clone(), stdout, gen);
-        spawn_log_reader(app.clone(), stderr);
-        spawn_exit_watcher(app.clone(), Arc::clone(&self.inner));
+        spawn_record_reader(app.clone(), stdout, gen, self.slot.clone());
+        spawn_log_reader(app.clone(), stderr, self.slot.clone());
+        spawn_exit_watcher(app.clone(), Arc::clone(&self.inner), self.slot.clone());
 
         Ok(location)
     }
@@ -400,7 +451,7 @@ impl PiHandle {
         drop(guard);
 
         if let Some(app) = app {
-            let _ = app.emit(EVT_STATUS, json!({ "state": "stopped" }));
+            let _ = app.emit(EVT_STATUS, json!({ "state": "stopped", "slot": self.slot }));
         }
         Ok(())
     }
@@ -417,7 +468,7 @@ impl PiHandle {
 
 impl Default for PiHandle {
     fn default() -> Self {
-        Self::new()
+        Self::for_slot(String::new())
     }
 }
 
@@ -442,8 +493,9 @@ async fn shutdown(inner: &mut PiInner) {
 // ---------------------------------------------------------------------------
 
 /// Split pi's stdout into records and forward each one to the webview,
-/// stamped with the generation of the process that wrote it.
-fn spawn_record_reader<R>(app: AppHandle, stream: R, gen: u64)
+/// stamped with the generation of the process that wrote it and the slot of
+/// the conversation it belongs to.
+fn spawn_record_reader<R>(app: AppHandle, stream: R, gen: u64, slot: String)
 where
     R: AsyncRead + Unpin + Send + 'static,
 {
@@ -458,10 +510,16 @@ where
                     }
                     match serde_json::from_str::<Value>(line) {
                         Ok(record) => {
-                            let _ = app.emit(EVT_RECORD, json!({ "gen": gen, "record": record }));
+                            let _ = app.emit(
+                                EVT_RECORD,
+                                json!({ "slot": slot, "gen": gen, "record": record }),
+                            );
                         }
                         Err(_) => {
-                            let _ = app.emit(EVT_LOG, json!({ "stream": "stdout", "line": line }));
+                            let _ = app.emit(
+                                EVT_LOG,
+                                json!({ "stream": "stdout", "line": line, "slot": slot }),
+                            );
                         }
                     }
                 }
@@ -469,7 +527,7 @@ where
                 Err(err) => {
                     let _ = app.emit(
                         EVT_LOG,
-                        json!({ "stream": "stdout", "error": err.to_string() }),
+                        json!({ "stream": "stdout", "error": err.to_string(), "slot": slot }),
                     );
                     break;
                 }
@@ -479,7 +537,7 @@ where
 }
 
 /// Diagnostics only — never parsed as protocol data.
-fn spawn_log_reader<R>(app: AppHandle, stream: R)
+fn spawn_log_reader<R>(app: AppHandle, stream: R, slot: String)
 where
     R: AsyncRead + Unpin + Send + 'static,
 {
@@ -490,7 +548,7 @@ where
                 Ok(Some(raw)) => {
                     let _ = app.emit(
                         EVT_LOG,
-                        json!({ "stream": "stderr", "line": raw.trim_end_matches('\r') }),
+                        json!({ "stream": "stderr", "line": raw.trim_end_matches('\r'), "slot": slot }),
                     );
                 }
                 Ok(None) => break,
@@ -501,7 +559,7 @@ where
 }
 
 /// Poll for child exit so the UI can show a dead engine instead of hanging.
-fn spawn_exit_watcher(app: AppHandle, inner: Arc<Mutex<PiInner>>) {
+fn spawn_exit_watcher(app: AppHandle, inner: Arc<Mutex<PiInner>>, slot: String) {
     tauri::async_runtime::spawn(async move {
         loop {
             tokio::time::sleep(Duration::from_millis(400)).await;
@@ -522,7 +580,10 @@ fn spawn_exit_watcher(app: AppHandle, inner: Arc<Mutex<PiInner>>) {
                 guard.child = None;
                 guard.stdin = None;
                 drop(guard);
-                let _ = app.emit(EVT_STATUS, json!({ "state": "exited", "code": code, "gen": died_gen }));
+                let _ = app.emit(
+                    EVT_STATUS,
+                    json!({ "state": "exited", "code": code, "gen": died_gen, "slot": slot }),
+                );
                 return;
             }
         }

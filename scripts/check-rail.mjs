@@ -143,6 +143,7 @@ const BASE_PROPS = {
   workspaces: WORKSPACES,
   activePath: ALPHA,
   activeChatId: "c2",
+  backgroundBusy: [],
   engineRunning: true,
   onAddWorkspace: noop,
   onSelectWorkspace: noop,
@@ -194,6 +195,14 @@ async function main() {
 
   check("当前会话带 is-active", countClass(html, "rail-chat is-active") === 1, `= ${countClass(html, "rail-chat is-active")}`);
   check("当前工作区带 is-active", countClass(html, "rail-group-head is-active") === 1, `= ${countClass(html, "rail-group-head is-active")}`);
+
+  // 后台还在跑回合的会话：圆点必须呼吸起来。用户切走会话 A 后唯一的真相来源
+  // 就是这颗点——它说"A 没被杀，回去还在写"。
+  const bgHtml = render({ ...BASE_PROPS, backgroundBusy: ["c1"] });
+  check("后台运行的会话圆点带 is-running", countClass(bgHtml, "rail-slot rail-dot is-running") === 1, `= ${countClass(bgHtml, "rail-slot rail-dot is-running")}`);
+  check("后台运行圆点带解释文案（title）", bgHtml.includes("正在后台运行"));
+  check("没在后台的会话不带 is-running", !html.includes("is-running"));
+
   check("未绑定会话有标记", html.includes("未绑定"));
   check("展开状态写在 aria-expanded 上", (html.match(/aria-expanded="true"/g) || []).length === 3);
   // Archiving is a rail-level filter: the chat keeps existing (and keeps owning

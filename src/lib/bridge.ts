@@ -17,6 +17,8 @@ export interface PiLocation {
 export interface EngineStatus {
   /** `starting` is an optimistic UI state; `running` is emitted by the host. */
   state: "starting" | "running" | "exited" | "stopped";
+  /** Which conversation slot this status belongs to. */
+  slot?: string;
   cwd?: string;
   code?: number | null;
   location?: PiLocation;
@@ -25,12 +27,16 @@ export interface EngineStatus {
 }
 
 /**
- * What the host puts on `pi://record`: the parsed stdout line, stamped with the
- * generation of the process that wrote it. Events from a replaced engine can
- * land after the new one has started (the old pipe flushes when it dies), and
- * a late `agent_start` would otherwise pin `busy` on a live, idle engine.
+ * What the host puts on `pi://record`: the parsed stdout line, stamped with
+ * the slot of the conversation that owns the process and the generation of
+ * the process itself. Events from a backgrounded or replaced engine keep
+ * arriving while the UI looks at another chat, so both tags must be checked
+ * before anything touches the live view — a stale `agent_start` would
+ * otherwise pin `busy` on an idle engine forever, and a background chat's
+ * streaming text would bleed into the chat on screen.
  */
 export interface PiRecordEnvelope {
+  slot: string;
   gen: number;
   record: PiRecord;
 }
@@ -49,35 +55,37 @@ export interface PiRuntimeStatus {
 
 export const pi = {
   /**
-   * Start the engine.
+   * Start the engine for one conversation slot.
    *
    * `skills` is the conversation's skill allowlist as SKILL.md paths. Passing it
    * switches pi to "only these skills exist" (`--no-skills` + `--skill`), which
    * is what makes a switched-off skill untriggerable; an empty array is a real
    * instruction — nothing enabled. `null` leaves pi's own discovery alone.
    */
-  start: (cwd?: string | null, skills?: string[] | null, session?: string | null) =>
+  start: (slot: string, cwd?: string | null, skills?: string[] | null, session?: string | null) =>
     invoke<PiLocation>("pi_start", {
+      slot,
       cwd: cwd ?? null,
       skills: skills ?? null,
       session: session ?? null,
     }),
 
-  stop: () => invoke<void>("pi_stop"),
+  stop: (slot: string) => invoke<void>("pi_stop", { slot }),
 
-  /** Escape hatch for any RPC command record. */
-  send: (command: Record<string, unknown>) =>
-    invoke<void>("pi_send", { command }),
+  /** Escape hatch for any RPC command record, addressed to one slot. */
+  send: (slot: string, command: Record<string, unknown>) =>
+    invoke<void>("pi_send", { slot, command }),
 
-  prompt: (message: string, streamingBehavior?: "steer" | "followUp") =>
+  prompt: (slot: string, message: string, streamingBehavior?: "steer" | "followUp") =>
     invoke<void>("pi_prompt", {
+      slot,
       message,
       streamingBehavior: streamingBehavior ?? null,
     }),
 
-  abort: () => invoke<void>("pi_abort"),
+  abort: (slot: string) => invoke<void>("pi_abort", { slot }),
 
-  status: () => invoke<PiRuntimeStatus>("pi_status"),
+  status: (slot: string) => invoke<PiRuntimeStatus>("pi_status", { slot }),
 
   defaultCwd: () => invoke<string>("pi_default_cwd"),
 
@@ -93,10 +101,10 @@ export const pi = {
 };
 
 export function onRecord(
-  handler: (record: PiRecord, gen: number) => void,
+  handler: (record: PiRecord, gen: number, slot: string) => void,
 ): Promise<UnlistenFn> {
   return listen<PiRecordEnvelope>("pi://record", (event) =>
-    handler(event.payload.record, event.payload.gen),
+    handler(event.payload.record, event.payload.gen, event.payload.slot),
   );
 }
 
@@ -127,6 +135,15 @@ export function setWindowBackground(color: string): void {
  */
 export const ENGINE_RESTARTED = "引擎已重启，命令已取消";
 
+/**
+ * Rejection message used when a pending command is dropped because the user
+ * left its conversation while it was in flight. The engine itself keeps
+ * running in the background — only the UI's wait is over, so callers treat it
+ * like {@link ENGINE_RESTARTED}: quietly, without an error notice.
+ */
+export const SLOT_DETACHED = "已切走，该会话转入后台";
+
 export function isRestartCancellation(error: unknown): boolean {
-  return error instanceof Error && error.message.includes(ENGINE_RESTARTED);
+  if (!(error instanceof Error)) return false;
+  return error.message.includes(ENGINE_RESTARTED) || error.message.includes(SLOT_DETACHED);
 }

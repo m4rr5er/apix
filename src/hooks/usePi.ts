@@ -7,6 +7,7 @@ import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "r
 
 import {
   ENGINE_RESTARTED,
+  SLOT_DETACHED,
   isRestartCancellation,
   onLog,
   onRecord,
@@ -32,6 +33,12 @@ import {
 } from "../lib/protocol";
 import { initialState, reduce } from "../lib/reducer";
 import { sameSessionPath } from "../lib/sessionRecovery";
+import {
+  removeTask,
+  requeueCommands,
+  type QueueKind,
+  type QueuedTask,
+} from "../lib/queue";
 
 export interface LogEntry {
   id: number;
@@ -111,14 +118,6 @@ export function usePi(extraVisibleProviders: readonly string[] = []) {
   const [skills, setSkills] = useState<SkillEntry[]>([]);
   const [skillsLoaded, setSkillsLoaded] = useState(false);
   /**
-   * Signature of the allowlist the running engine was started with.
-   *
-   * `syncSkills` compares against it so a restart happens only when the set of
-   * enabled skills actually changed — switching between two conversations with
-   * the same switches costs nothing.
-   */
-  const appliedSkillsRef = useRef<string | null>(null);
-  /**
    * The session file the engine currently has open, as this side named it.
    *
    * `start` can hand pi a session with `--session`, so after a restart the
@@ -127,35 +126,70 @@ export function usePi(extraVisibleProviders: readonly string[] = []) {
    * it tears the runtime down and rebuilds it, which measures at ~1.2s on a real
    * workspace.
    */
-  const openSessionRef = useRef<string | null>(null);
+  const openSessionBySlot = useRef(new Map<string, string | null>());
   /**
-   * The engine generation the UI currently accepts events from. The host bumps
-   * it with the `running` status before that process can emit any record, so a
-   * record stamped with an older generation is a late arrival from a dead
-   * process (the old stdout pipe flushes as it dies) and must not touch state —
-   * a stale `agent_start` would otherwise pin `busy` on an idle engine forever,
-   * because the process that owes the matching `agent_settled` no longer
-   * exists.
+   * The allowlist each slot's engine was spawned with, per slot — `restart`
+   * must never hand a chat another chat's skills, and with a single shared
+   * string that is exactly what happened after two spawns.
    */
-  const engineGenRef = useRef(0);
-  /** Responses we are waiting for, keyed by the command id we sent. */
-  const pending = useRef(
-    new Map<
-      string,
-      { resolve: (value: unknown) => void; reject: (error: Error) => void }
-    >(),
-  );
+  const appliedSkillsBySlot = useRef(new Map<string, string>());
+  /**
+   * Per-slot spawn counters. The host stamps every record with the generation
+   * of the process that wrote it, and raises the accepted one with the
+   * `running` status before that process can emit anything; a record carrying
+   * an older generation is a late arrival from a dead process (the old stdout
+   * pipe flushes when it dies) and must not touch state.
+   */
+  const genBySlot = useRef(new Map<string, number>());
+  /**
+   * The conversation whose engine drives the on-screen view. Every command is
+   * addressed to it, and only its events reach the reducer — a backgrounded
+   * chat keeps streaming, and its text bleeding into the visible transcript
+   * (or its `agent_start` pinning `busy`) is exactly the corruption the slot
+   * tags exist to prevent.
+   */
+  const slotRef = useRef<string>("");
+  const [activeSlot, setActiveSlot] = useState("");
+  /** Slots with a live pi process in the host registry right now. */
+  const liveSlotsRef = useRef(new Set<string>());
+  /**
+   * Slots whose engine is mid-turn while off screen. Their events are watched
+   * for exactly one thing: `agent_settled`, which retires the process — the
+   * transcript is already on disk, and an engine nobody is looking at earns
+   * no rent.
+   */
+  const bgBusyRef = useRef(new Set<string>());
+  const [backgroundBusy, setBackgroundBusy] = useState<string[]>([]);
+  /** Slots that missed a settings reload while backgrounded; reloaded on attach. */
+  const dirtyReloadRef = useRef(new Set<string>());
+  /**
+   * Pending RPC responses, per slot: leaving a chat rejects *its* waiters (the
+   * chains bail like they do on a restart), but a different slot's in-flight
+   * request must survive the switch untouched.
+   */
+  const pending = useRef(new Map<string, Map<string, { resolve: (value: unknown) => void; reject: (error: Error) => void }>>());
 
-  const settlePending = useCallback((record: PiRecord) => {
+  const settlePending = useCallback((slot: string, record: PiRecord) => {
     const id = typeof record.id === "string" ? record.id : undefined;
     if (!id) return;
-    const waiter = pending.current.get(id);
-    if (!waiter) return;
-    pending.current.delete(id);
+    const waiters = pending.current.get(slot);
+    const waiter = waiters?.get(id);
+    if (!waiter || !waiters) return;
+    waiters.delete(id);
     if (record.success) {
       waiter.resolve(record.data);
     } else {
       waiter.reject(new Error(String(record.error ?? "pi 拒绝了该命令")));
+    }
+  }, []);
+
+  /** Reject and forget every waiter of one slot (restart / detach). */
+  const dropPending = useCallback((slot: string, message: string) => {
+    const waiters = pending.current.get(slot);
+    if (!waiters) return;
+    pending.current.delete(slot);
+    for (const waiter of waiters.values()) {
+      waiter.reject(new Error(message));
     }
   }, []);
 
@@ -180,17 +214,39 @@ export function usePi(extraVisibleProviders: readonly string[] = []) {
       else unlisteners.push(fn);
     };
 
-    const handleRecord = (record: PiRecord, gen: number) => {
-      if (gen < engineGenRef.current) return;
+    const markBackgroundBusy = (slot: string, busy: boolean) => {
+      if (busy) bgBusyRef.current.add(slot);
+      else bgBusyRef.current.delete(slot);
+      setBackgroundBusy([...bgBusyRef.current]);
+      if (!busy) {
+        // The turn ended off screen. The transcript is already on disk, so the
+        // engine has nothing left to do here — retire it and let the next
+        // attach start a fresh one against the file.
+        if (liveSlotsRef.current.has(slot)) {
+          liveSlotsRef.current.delete(slot);
+          void pi.stop(slot).catch(() => undefined);
+        }
+      }
+    };
+
+    const handleRecord = (record: PiRecord, gen: number, slot: string) => {
+      if (slot !== slotRef.current) {
+        // A backgrounded conversation. Only its turn boundaries matter to us;
+        // everything else stays in that chat's own session file.
+        if (record.type === "agent_start") markBackgroundBusy(slot, true);
+        else if (record.type === "agent_settled") markBackgroundBusy(slot, false);
+        return;
+      }
+      if (gen < (genBySlot.current.get(slot) ?? 0)) return;
       addLog("record", JSON.stringify(record));
 
       if (record.type === "response") {
-        settlePending(record);
+        settlePending(slot, record);
       }
 
       if (record.type === "extension_ui_request") {
         const ui = record as unknown as ExtensionUiRequest;
-        handleExtensionUi(ui, dispatch, addLog);
+        handleExtensionUi(slot, ui, dispatch, addLog);
         return;
       }
 
@@ -199,9 +255,17 @@ export function usePi(extraVisibleProviders: readonly string[] = []) {
 
     void onRecord(handleRecord).then(keep);
     void onStatus((status) => {
-      if (typeof status.gen === "number" && status.gen > engineGenRef.current) {
-        engineGenRef.current = status.gen;
+      const slot = status.slot ?? "";
+      if (typeof status.gen === "number") {
+        const known = genBySlot.current.get(slot) ?? 0;
+        if (status.gen > known) genBySlot.current.set(slot, status.gen);
       }
+      if (status.state === "running") liveSlotsRef.current.add(slot);
+      if (status.state === "exited" || status.state === "stopped") {
+        liveSlotsRef.current.delete(slot);
+        if (bgBusyRef.current.has(slot)) markBackgroundBusy(slot, false);
+      }
+      if (slot !== slotRef.current) return;
       setEngine(status);
       if (status.location) setLocation(status.location);
       // Keep the rail in sync with the directory pi actually received.
@@ -223,22 +287,33 @@ export function usePi(extraVisibleProviders: readonly string[] = []) {
   }, [addLog, settlePending]);
 
   /**
-   * Send a command with a caller-owned id and resolve with its response data.
-   * Used by the settings panel and the composer to ask pi for live state.
+   * Send a command to the *active* slot with a caller-owned id and resolve with
+   * its response data. Used by the settings panel and the composer to ask pi
+   * for live state.
    */
   const request = useCallback(
     <T,>(command: Record<string, unknown>): Promise<T> => {
+      const slot = slotRef.current;
       requestSeq.current += 1;
       const id = `ui-${requestSeq.current}`;
 
       return new Promise<T>((resolve, reject) => {
+        const waitersOf = () => {
+          let waiters = pending.current.get(slot);
+          if (!waiters) {
+            waiters = new Map();
+            pending.current.set(slot, waiters);
+          }
+          return waiters;
+        };
         const timer = window.setTimeout(() => {
-          if (pending.current.delete(id)) {
+          const waiters = pending.current.get(slot);
+          if (waiters?.delete(id)) {
             reject(new Error("pi 在 20 秒内没有响应"));
           }
         }, 20000);
 
-        pending.current.set(id, {
+        waitersOf().set(id, {
           resolve: (value) => {
             window.clearTimeout(timer);
             resolve(value as T);
@@ -249,9 +324,9 @@ export function usePi(extraVisibleProviders: readonly string[] = []) {
           },
         });
 
-        void pi.send({ ...command, id }).catch((error: unknown) => {
+        void pi.send(slot, { ...command, id }).catch((error: unknown) => {
           window.clearTimeout(timer);
-          pending.current.delete(id);
+          pending.current.get(slot)?.delete(id);
           reject(error instanceof Error ? error : new Error(String(error)));
         });
       });
@@ -436,52 +511,132 @@ export function usePi(extraVisibleProviders: readonly string[] = []) {
         text: `settings.json 里的默认模型 ${current} 不在 models.json 中，已改用 ${modelKey(fallback)}。可以在「设置 → 模型供应商」里用星标把想用的那家设为默认，之后就不会再出现这条提示。`,
       });
     }
-    void pi.send({ type: "set_model", provider: fallback.provider, modelId: fallback.id });
+    void pi.send(slotRef.current, { type: "set_model", provider: fallback.provider, modelId: fallback.id });
   }, [availableModels, engine.state, engineGeneration, state.busy, state.model]);
 
   // ------------------------------------------------------------- lifecycle
+  /** Spawn (or respawn) the engine for the *active* slot. */
   const start = useCallback(
     async (cwd: string | null, skillPaths: string[] = [], session: string | null = null) => {
-      for (const waiter of pending.current.values()) {
-        waiter.reject(new Error(ENGINE_RESTARTED));
-      }
-      pending.current.clear();
+      const slot = slotRef.current;
+      dropPending(slot, ENGINE_RESTARTED);
       // Invalidate in-flight session operations: their session belongs to a
       // process that is about to be replaced.
       sessionOpRef.current += 1;
 
-      setEngine({ state: "starting" });
+      setEngine({ state: "starting", slot });
       // A new process has no turn in flight: drop `busy` here rather than wait
       // for an `agent_settled` that a killed process will never send.
       dispatch({ kind: "engineReset" });
       try {
-        const result = await pi.start(cwd, skillPaths, session);
-        // What the running engine was actually built with, for `syncSkills`.
-        appliedSkillsRef.current = skillPaths.join("\n");
+        const result = await pi.start(slot, cwd, skillPaths, session);
+        liveSlotsRef.current.add(slot);
+        // What the running engine was actually built with, for `restart`.
+        appliedSkillsBySlot.current.set(slot, skillPaths.join("\n"));
         // What it has open, so `openSession` can skip a redundant switch.
-        openSessionRef.current = session;
+        openSessionBySlot.current.set(slot, session);
         setLocation(result);
         // Deliberately no transcript reset here. A start is almost always a
-        // restart — a workspace switch, a settings change, a skills change — and
-        // clearing would blank the pane and then refill it, which reads as a
-        // stutter. The session that is opened next replaces the items anyway
+        // restart — a settings change, a skills change — and clearing would
+        // blank the pane and then refill it, which reads as a stutter. The
+        // session that is opened next replaces the items anyway
         // (`switchSession` reloads them), and the one case that genuinely has
         // nothing to show — a workspace with no conversations — is cleared by
         // the caller that decides it.
         addLog("app", `pi 就绪\n  node  ${result.node}\n  entry ${result.entry}`);
         // Ask pi for its own view of the world so the UI never guesses.
-        void pi.send({ type: "get_state" });
-        void pi.send({ type: "get_messages" });
+        void pi.send(slot, { type: "get_state" });
+        void pi.send(slot, { type: "get_messages" });
         engineGenerationRef.current += 1;
         setEngineGeneration(engineGenerationRef.current);
       } catch (error) {
         dispatch({ kind: "notice", level: "error", text: String(error) });
-        setEngine({ state: "exited" });
+        setEngine({ state: "exited", slot });
         addLog("app", `启动失败：${String(error)}`);
       }
     },
-    [addLog],
+    [addLog, dropPending],
   );
+
+  /**
+   * Point the view at another conversation slot.
+   *
+   * If its engine is still alive — because the turn it was running never got
+   * interrupted — the view re-attaches to it and re-reads where it stands;
+   * nothing is restarted and nothing is aborted. Otherwise a fresh engine is
+   * spawned straight onto the chat's session file, which is the same
+   * `--session` fast path a workspace switch used to pay for.
+   *
+   * Returns whether the slot's engine was already live — `false` means this
+   * attach spawned it (and `start` already asked it for state), while `true`
+   * means the caller may still have to reconcile the session the engine has
+   * open with the one the chat is bound to (`openChat`'s job).
+   */
+  const attach = useCallback(
+    async (
+      slot: string,
+      opts: { cwd: string | null; skills: string[]; session: string | null },
+    ): Promise<boolean> => {
+      if (slotRef.current && slotRef.current !== slot) detachRef.current?.();
+      slotRef.current = slot;
+      setActiveSlot(slot);
+      // Chains started for the slot we just left must not report back.
+      sessionOpRef.current += 1;
+      dispatch({ kind: "clearTranscript" });
+      dispatch({ kind: "engineReset" });
+      setStats(null);
+      if (liveSlotsRef.current.has(slot)) {
+        setEngine({ state: "running", slot, cwd: opts.cwd ?? undefined });
+        void pi.send(slot, { type: "get_state" }).catch(() => undefined);
+        void pi.send(slot, { type: "get_messages" }).catch(() => undefined);
+        if (dirtyReloadRef.current.delete(slot)) {
+          // Settings changed while this engine was off screen; catch it up.
+          void reloadConfigRef.current?.();
+        }
+        return true;
+      }
+      await start(opts.cwd, opts.skills, opts.session);
+      return false;
+    },
+    [start],
+  );
+
+  /**
+   * Leave the current slot.
+   *
+   * Mid-turn, the engine keeps running: its records now route to the
+   * background watcher, which retires it the moment the turn settles. Idle,
+   * the process is stopped right away — an idle engine for a chat nobody is
+   * looking at only costs memory, and its transcript is on disk anyway.
+   */
+  const detach = useCallback(() => {
+    const slot = slotRef.current;
+    if (!slot) return;
+    sessionOpRef.current += 1;
+    dropPending(slot, SLOT_DETACHED);
+    if (!liveSlotsRef.current.has(slot)) return;
+    if (busyRef.current) {
+      // The turn started while we were watching: it is now a background turn.
+      bgBusyRef.current.add(slot);
+      setBackgroundBusy([...bgBusyRef.current]);
+      return;
+    }
+    liveSlotsRef.current.delete(slot);
+    void pi.stop(slot).catch(() => undefined);
+  }, [dropPending]);
+
+  // Synchronous mirrors so `attach`/`detach`/`restart` read the truth of the
+  // moment, not a closure from the render that scheduled them.
+  const busyRef = useRef(false);
+  const stateRef = useRef(state);
+  useEffect(() => {
+    busyRef.current = state.busy;
+    stateRef.current = state;
+  }, [state]);
+  const detachRef = useRef<(() => void) | null>(null);
+  useEffect(() => {
+    detachRef.current = detach;
+  }, [detach]);
 
   useEffect(() => {
     return () => {
@@ -492,41 +647,19 @@ export function usePi(extraVisibleProviders: readonly string[] = []) {
   const restart = useCallback(
     async (cwd?: string) => {
       // Reuse the allowlist the engine already had: a manual restart must not
-      // silently drop the conversation's skills.
-      const paths = (appliedSkillsRef.current ?? "").split("\n").filter(Boolean);
-      await start(cwd ?? workdir ?? null, paths);
+      // silently drop the conversation's skills. Resume the same session file
+      // so the chat on screen survives its engine — a restart is not a reset.
+      const paths = (appliedSkillsBySlot.current.get(slotRef.current) ?? "").split("\n").filter(Boolean);
+      const session = stateRef.current.sessionFile ?? undefined;
+      await start(cwd ?? workdir ?? null, paths, session ?? null);
     },
     [start, workdir],
-  );
-
-  /**
-   * Make the running engine match a conversation's skill allowlist.
-   *
-   * pi can only be told which skills exist at start-up (`--no-skills --skill …`),
-   * so a change means a restart. `appliedSkillsRef` makes that conditional: two
-   * conversations with the same switches cost nothing, and a conversation whose
-   * switches differ is one restart. The caller reopens the session afterwards —
-   * the generation effect already does that.
-   *
-   * @returns whether the engine was actually restarted.
-   */
-  const syncSkills = useCallback(
-    async (cwd: string | null, skillPaths: string[]): Promise<boolean> => {
-      if (appliedSkillsRef.current === skillPaths.join("\n")) return false;
-      await start(cwd, skillPaths);
-      return true;
-    },
-    [start],
   );
 
   /**
    * Mirrors `state.busy`, so a reload can wait for the current turn rather than
    * pulling the model and the tool registry out from under it.
    */
-  const busyRef = useRef(false);
-  useEffect(() => {
-    busyRef.current = state.busy;
-  }, [state.busy]);
 
   /** Resolve once no turn is running, or after `timeoutMs` either way. */
   const waitUntilIdle = useCallback(async (timeoutMs = 20000) => {
@@ -566,6 +699,12 @@ export function usePi(extraVisibleProviders: readonly string[] = []) {
         await request({ type: "prompt", message: "/apix-reload" });
         // The library on disk may be what changed, and the composer reads it.
         await reloadSkills();
+        // Engines of *other* slots missed this reload; they catch up the next
+        // time the user attaches to them, not now — a background chat is not
+        // worth a serial round trip per switch.
+        for (const live of liveSlotsRef.current) {
+          if (live !== slotRef.current) dirtyReloadRef.current.add(live);
+        }
         engineGenerationRef.current += 1;
         setEngineGeneration(engineGenerationRef.current);
         return true;
@@ -581,20 +720,39 @@ export function usePi(extraVisibleProviders: readonly string[] = []) {
     return run;
   }, [addLog, reloadSkills, request, waitUntilIdle]);
 
+  const reloadConfigRef = useRef<(() => Promise<boolean>) | null>(null);
+  useEffect(() => {
+    reloadConfigRef.current = reloadConfig;
+  }, [reloadConfig]);
+
   const stop = useCallback(async () => {
     try {
-      await pi.stop();
+      await pi.stop(slotRef.current);
+      liveSlotsRef.current.delete(slotRef.current);
     } catch (error) {
       addLog("app", `停止失败：${String(error)}`);
     }
   }, [addLog]);
+
+  /** Stop one slot's engine by id — used for chats removed while backgrounded. */
+  const stopSlot = useCallback(async (slot: string) => {
+    if (!liveSlotsRef.current.has(slot)) return;
+    liveSlotsRef.current.delete(slot);
+    bgBusyRef.current.delete(slot);
+    setBackgroundBusy([...bgBusyRef.current]);
+    try {
+      await pi.stop(slot);
+    } catch {
+      /* the process may already be gone; the registry forgets it either way */
+    }
+  }, []);
 
   const send = useCallback(
     async (text: string, behavior?: "steer" | "followUp") => {
       const trimmed = text.trim();
       if (!trimmed) return;
       try {
-        await pi.prompt(trimmed, behavior);
+        await pi.prompt(slotRef.current, trimmed, behavior);
       } catch (error) {
         dispatch({ kind: "notice", level: "error", text: String(error) });
       }
@@ -604,16 +762,62 @@ export function usePi(extraVisibleProviders: readonly string[] = []) {
 
   const abort = useCallback(async () => {
     try {
-      await pi.abort();
+      await pi.abort(slotRef.current);
     } catch (error) {
       addLog("app", `中断失败：${String(error)}`);
     }
   }, [addLog]);
 
+  /**
+   * Act on one queued message: inject it now, pull it back for editing, or
+   * drop it.
+   *
+   * pi has no per-item queue command, so the only honest way is the three-step
+   * dance in `lib/queue`: `clear_queue` takes the whole queue out (and pi
+   * emits a `queue_update`, so the dock empties with it), the rest go back
+   * through `steer`/`follow_up` into their original buckets, and the picked
+   * item is either re-injected as steering (it lands before the next model
+   * call — this is what "insert without interrupting" means in pi), returned
+   * for the composer, or dropped.
+   *
+   * If pi consumed something at a turn boundary between the dock render and
+   * the `clear_queue` landing, the index may no longer exist. Then the queue
+   * is restored untouched and the caller is told — dropping a queued prompt
+   * by accident is the one outcome this function must never produce.
+   *
+   * Returns the picked text for `edit`; null for the others.
+   */
+  const queueOp = useCallback(
+    async (
+      kind: QueueKind,
+      index: number,
+      mode: "inject" | "edit" | "delete",
+    ): Promise<string | null> => {
+      const queue = await request<{ steering?: string[]; followUp?: string[] }>({
+        type: "clear_queue",
+      });
+      const tasks: QueuedTask[] = [
+        ...(queue?.steering ?? []).map((text): QueuedTask => ({ kind: "steer", text })),
+        ...(queue?.followUp ?? []).map((text): QueuedTask => ({ kind: "follow-up", text })),
+      ];
+      const { target, rest } = removeTask(tasks, kind, index);
+      for (const command of requeueCommands(target ? rest : tasks)) {
+        await request(command);
+      }
+      if (!target) throw new Error("队列刚刚变了（可能有一条已被取走），请再试一次");
+      if (mode === "inject") {
+        await request({ type: "steer", message: target.text });
+        return null;
+      }
+      return mode === "edit" ? target.text : null;
+    },
+    [request],
+  );
+
   const refreshHistory = useCallback(async () => {
     try {
-      await pi.send({ type: "get_state" });
-      await pi.send({ type: "get_messages" });
+      await pi.send(slotRef.current, { type: "get_state" });
+      await pi.send(slotRef.current, { type: "get_messages" });
     } catch (error) {
       addLog("app", `读取历史失败：${String(error)}`);
     }
@@ -622,7 +826,7 @@ export function usePi(extraVisibleProviders: readonly string[] = []) {
   /**
    * Push a get_state payload through the reducer without a round trip.
    *
-   * Also the one place `openSessionRef` learns the engine's current session:
+   * Also the one place each slot learns the engine's current session:
    * every operation that changes it (`new_session`, `switch_session`, `fork`)
    * applies its `get_state` through here, and a ref left behind makes the next
    * `openSession` re-switch a session that is already open — whose trailing
@@ -630,7 +834,7 @@ export function usePi(extraVisibleProviders: readonly string[] = []) {
    * blanking the context meter for good.
    */
   const applyState = useCallback((data: RpcSessionState) => {
-    if (data?.sessionFile) openSessionRef.current = data.sessionFile;
+    if (data?.sessionFile) openSessionBySlot.current.set(slotRef.current, data.sessionFile);
     dispatch({
       kind: "record",
       record: {
@@ -644,7 +848,7 @@ export function usePi(extraVisibleProviders: readonly string[] = []) {
 
   const reloadMessages = useCallback(async () => {
     try {
-      await pi.send({ type: "get_messages" });
+      await pi.send(slotRef.current, { type: "get_messages" });
     } catch (error) {
       addLog("app", `读取历史失败：${String(error)}`);
     }
@@ -681,7 +885,7 @@ export function usePi(extraVisibleProviders: readonly string[] = []) {
       // those away first, leaving nothing to restore them.
       dispatch({ kind: "clearTranscript" });
       setStats(null);
-      await pi.send({ type: "new_session" });
+      await pi.send(slotRef.current, { type: "new_session" });
       const data = await request<RpcSessionState>({ type: "get_state" });
       if (sessionOpRef.current !== token) return null;
       applyState(data);
@@ -756,7 +960,8 @@ export function usePi(extraVisibleProviders: readonly string[] = []) {
    */
   const openSession = useCallback(
     async (sessionPath: string): Promise<SwitchOutcome> => {
-      if (openSessionRef.current && sameSessionPath(openSessionRef.current, sessionPath)) {
+      const opened = openSessionBySlot.current.get(slotRef.current) ?? null;
+      if (opened && sameSessionPath(opened, sessionPath)) {
         try {
           await reloadMessages();
           return { opened: true, cancelled: false, reason: "" };
@@ -772,7 +977,7 @@ export function usePi(extraVisibleProviders: readonly string[] = []) {
   const renameSession = useCallback(
     async (name: string) => {
       try {
-        await pi.send({ type: "set_session_name", name });
+        await pi.send(slotRef.current, { type: "set_session_name", name });
       } catch (error) {
         addLog("app", `重命名会话失败：${String(error)}`);
       }
@@ -897,7 +1102,7 @@ export function usePi(extraVisibleProviders: readonly string[] = []) {
   /** Ask pi to compact the session's context. */
   const compactContext = useCallback(async () => {
     try {
-      await pi.send({ type: "compact" });
+      await pi.send(slotRef.current, { type: "compact" });
     } catch (error) {
       dispatch({ kind: "notice", level: "error", text: `压缩上下文失败：${String(error)}` });
     }
@@ -918,6 +1123,12 @@ export function usePi(extraVisibleProviders: readonly string[] = []) {
     workdir,
     setWorkdir,
     location,
+    /** The conversation slot driving the view, and the background turn tracker. */
+    activeSlot,
+    backgroundBusy,
+    attach,
+    detach,
+    stopSlot,
     start,
     restart,
     stop,
@@ -925,8 +1136,6 @@ export function usePi(extraVisibleProviders: readonly string[] = []) {
     skills,
     skillsLoaded,
     reloadSkills,
-    /** Aligns the engine's skill allowlist with a conversation. */
-    syncSkills,
     /** Make the engine re-read its configuration in place, without restarting. */
     reloadConfig,
     /** Open a session, skipping the round trip when the engine is already on it. */
@@ -935,6 +1144,7 @@ export function usePi(extraVisibleProviders: readonly string[] = []) {
     clearTranscript,
     send,
     abort,
+    queueOp,
     refreshHistory,
     newSession,
     switchSession,
@@ -988,6 +1198,7 @@ function resolveThinkingLevels(
  * reply that will not come.
  */
 function handleExtensionUi(
+  slot: string,
   request: ExtensionUiRequest,
   dispatch: (action: { kind: "notice"; level: "info" | "warn" | "error"; text: string }) => void,
   addLog: (stream: LogEntry["stream"], text: string) => void,
@@ -1019,7 +1230,7 @@ function handleExtensionUi(
         level: "warn",
         text: `扩展请求「${request.method}」暂未实现交互，已自动取消。`,
       });
-      void pi.send({ type: "extension_ui_response", id: request.id, cancelled: true });
+      void pi.send(slot, { type: "extension_ui_response", id: request.id, cancelled: true });
     }
   }
 }

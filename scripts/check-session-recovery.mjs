@@ -227,8 +227,8 @@ async function main() {
   const usePi = readFileSync(resolve("src/hooks/usePi.ts"), "utf8");
   const applyStateBody = /const applyState = useCallback\(\([\s\S]*?\n  \}, \[/.exec(usePi)?.[0] ?? "";
   check(
-    "applyState 把 get_state 报回的 sessionFile 记进 openSessionRef（唯一回填点）",
-    applyStateBody.includes("openSessionRef.current") && Boolean(applyStateBody.match(/data[?.]*\.sessionFile/)),
+    "applyState 把 get_state 报回的 sessionFile 按槽位记进 openSessionBySlot（唯一回填点）",
+    applyStateBody.includes("openSessionBySlot.current.set") && Boolean(applyStateBody.match(/data[?.]*\.sessionFile/)),
     applyStateBody.replace(/\s+/g, " ").slice(0, 140),
   );
   for (const op of ["newSession", "switchSession", "rewindToTurn"]) {

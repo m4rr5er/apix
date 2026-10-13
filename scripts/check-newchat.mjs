@@ -280,11 +280,11 @@ check(
 );
 check(
   "running 状态事件也带代际号（前端先认代数，再收事件）",
-  /"state":\s*"running"[\s\S]{0,120}"gen"/.test(piRs),
+  /"state":\s*"running"[\s\S]{0,240}"gen"/.test(piRs),
 );
 check(
-  "usePi 丢弃旧代际的 record（stale 事件进不了 reducer）",
-  /engineGenRef\.current/.test(usePiSrc) && /gen\s*<\s*engineGenRef\.current/.test(usePiSrc),
+  "usePi 按槽位丢弃旧代际的 record（stale 事件进不了 reducer）",
+  /genBySlot\.current/.test(usePiSrc) && /gen\s*<\s*\(genBySlot\.current\.get\(slot\)/.test(usePiSrc),
 );
 check(
   "usePi 的 start() 派发 engineReset",

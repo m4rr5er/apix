@@ -1336,6 +1336,29 @@ kbd {
   white-space: nowrap;
 }
 
+/* 每条队列项的动作区（立即插入 / 编辑 / 删除）。和回合操作条同一套逻辑：
+   平时隐形不抢读，hover 或键盘聚焦到这一行才出现——按钮本身始终可聚焦，
+   所以只用 opacity 隐藏，不能用 display（那会让 Tab 序列凭空消失）。 */
+.queue-dock-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+  margin-left: auto;
+  flex: none;
+  opacity: 0;
+  transition: opacity var(--apx-duration-fast) linear;
+}
+
+.queue-dock-item:hover .queue-dock-actions,
+.queue-dock-item:focus-within .queue-dock-actions {
+  opacity: 1;
+}
+
+.queue-dock-actions .icon-btn {
+  width: 22px;
+  height: 22px;
+}
+
 .queue-tag {
   flex: none;
   padding: 0 5px;
@@ -1985,6 +2008,30 @@ kbd {
 .rail-chat.is-active .rail-dot-glyph {
   background: var(--apx-accent);
   border-color: var(--apx-accent);
+}
+
+/* 后台还在跑的会话：pi 的回合没有被打断，圆点呼吸提示它活着。
+   prefers-reduced-motion 下退化为常亮，不闪。 */
+.rail-dot.is-running .rail-dot-glyph {
+  background: var(--apx-amber);
+  border-color: var(--apx-amber);
+  animation: rail-running-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes rail-running-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rail-dot.is-running .rail-dot-glyph {
+    animation: none;
+  }
 }
 
 /* Trailing cell: the same slot the hover actions take over. */

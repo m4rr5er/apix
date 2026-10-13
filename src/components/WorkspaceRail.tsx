@@ -57,6 +57,7 @@ export function WorkspaceRail({
   workspaces,
   activePath,
   activeChatId,
+  backgroundBusy,
   engineRunning,
   onAddWorkspace,
   onSelectWorkspace,
@@ -73,6 +74,8 @@ export function WorkspaceRail({
   workspaces: WorkspaceEntry[];
   activePath: string | null;
   activeChatId: string | null;
+  /** Chat ids whose engine is mid-turn while off screen. */
+  backgroundBusy: string[];
   engineRunning: boolean;
   onAddWorkspace: (path: string) => void;
   onSelectWorkspace: (path: string) => void;
@@ -291,7 +294,17 @@ export function WorkspaceRail({
                         key={chat.id}
                         onClick={() => onSelectChat(workspace.path, chat.id)}
                       >
-                        <span className="rail-slot rail-dot" aria-hidden="true">
+                        <span
+                          className={`rail-slot rail-dot${
+                            backgroundBusy.includes(chat.id) ? " is-running" : ""
+                          }`}
+                          aria-hidden="true"
+                          title={
+                            backgroundBusy.includes(chat.id)
+                              ? "这个会话正在后台运行，pi 的回合没有被打断"
+                              : undefined
+                          }
+                        >
                           <span className="rail-dot-glyph" />
                         </span>
                         <span

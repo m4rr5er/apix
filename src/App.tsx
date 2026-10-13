@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { Composer, type ComposerSeed } from "./components/Composer";
 import { CommandBar } from "./components/CommandBar";
@@ -17,7 +17,7 @@ import { liveChats, useWorkspaces } from "./hooks/useWorkspaces";
 import { copyText } from "./lib/clipboard";
 import { pi as piBridge } from "./lib/bridge";
 import { configApi, type ChatEntry, type SessionListing } from "./lib/configBridge";
-import type { ForkMessage } from "./lib/protocol";
+import type { ForkMessage, RpcSessionState } from "./lib/protocol";
 import { hasConversation } from "./lib/reducer";
 import { freshReasonText, resolveChatSession } from "./lib/sessionRecovery";
 import { enabledSkillPaths } from "./lib/skills";
@@ -157,6 +157,19 @@ export default function App() {
         pi.notify("warn", freshReasonText(target.reason));
       }
 
+      // An unbound chat on a just-spawned engine needs no `new_session` — the
+      // engine *is* the new session, and pi has already named its file. Adopt
+      // that name rather than tearing the fresh runtime down to build a second
+      // one; `newSession` stays on the path for the recovery cases below,
+      // where the engine really is on someone else's session.
+      if (target.kind === "fresh" && target.reason === "unbound") {
+        const data = await pi.request<RpcSessionState>({ type: "get_state" });
+        if (data?.sessionFile) {
+          await ws.bindSession(workspacePath, chat.id, data.sessionFile);
+          return;
+        }
+      }
+
       // `null` means a newer session operation took over, so this chain must
       // not bind anything.
       const info = await pi.newSession();
@@ -247,58 +260,63 @@ export default function App() {
   // ------------------------------------------------------------------ skills
   //
   // pi can only be told which skills exist at start-up (`--no-skills` plus one
-  // `--skill` per enabled skill), so the conversation's switches are resolved
-  // into a path list and handed to the engine. A skill that is not on is not in
-  // the session at all, which is what "只有开启的才会被触发" means in practice.
+  // `--skill` per enabled skill). With one engine per conversation, that is no
+  // longer a restart problem: the allowlist belongs to the conversation, it is
+  // decided when that conversation's engine is spawned (`focus`), and switching
+  // between conversations never changes anyone else's. Toggling a switch on a
+  // live, idle conversation respawns just that conversation's engine.
 
   const globalSkills = appearance.prefs.globalSkills;
   const chatSkills = ws.activeChat?.skills ?? {};
-  const activeSkillPaths = useMemo(
-    () => enabledSkillPaths(pi.skills, globalSkills, chatSkills),
-    [pi.skills, globalSkills, chatSkills],
-  );
-  /** Kept in a ref so the engine-start paths read the newest set, not a closure. */
-  const skillPathsRef = useRef<string[]>(activeSkillPaths);
-  skillPathsRef.current = activeSkillPaths;
-  /** Signature of the set the running engine was started with. */
-  const skillSignature = activeSkillPaths.join("\n");
-  const appliedSkillSignature = useRef<string | null>(null);
 
   /**
-   * Keep the engine's allowlist in step with the conversation.
+   * Put the view on a conversation: its own engine, in its workspace's cwd,
+   * with its own skill allowlist, already on its session file.
    *
-   * A restart is the only way to change it, so it happens only when the set
-   * really differs — moving between two conversations with the same switches
-   * costs nothing. The session is reopened by the generation effect, so the
-   * conversation survives the restart.
+   * This replaced the single-engine `applyWorkspace`, whose whole job was
+   * restarting one shared process onto the next chat's directory and session —
+   * and whose coalescing loop existed only because those restarts cancelled
+   * each other. With a process per conversation, a switch is either an attach
+   * to an engine that never stopped (background turns) or one cold start, and
+   * leaving a busy chat costs that chat nothing.
    */
-  useEffect(() => {
-    if (!ready || !pi.skillsLoaded) return;
-    if (appliedSkillSignature.current === null) {
-      // The engine was just started with this set by the bootstrap effect.
-      appliedSkillSignature.current = skillSignature;
-      return;
-    }
-    if (appliedSkillSignature.current === skillSignature) return;
-    appliedSkillSignature.current = skillSignature;
-    void pi.syncSkills(ws.activePath, activeSkillPaths).then((restarted) => {
-      if (restarted) {
-        pi.notify(
-          "info",
-          activeSkillPaths.length === 0
-            ? "已按当前会话停用全部 skill，并重启引擎。"
-            : `已按当前会话启用 ${activeSkillPaths.length} 个 skill，并重启引擎。`,
-        );
-      }
-    });
-  }, [activeSkillPaths, skillSignature, ready, pi, ws.activePath]);
+  const focus = useCallback(
+    async (workspacePath: string, chat: ChatEntry | null) => {
+      const slot = chat ? chat.id : `ws:${workspacePath}`;
+      const skills = enabledSkillPaths(pi.skills, globalSkills, chat?.skills ?? {});
+      const hint = chat ? await sessionHintFor(workspacePath, chat) : null;
+      const wasLive = await pi.attach(slot, { cwd: workspacePath, skills, session: hint });
+      // A live engine kept whatever session its last operation opened. Normal
+      // switches re-attach to exactly that (the hint matched), but a rebind
+      // since then — an adopt, a rewind — means the engine is on the old file,
+      // and only `openChat` knows how to reconcile the two.
+      if (wasLive && chat) void openChat(workspacePath, chat);
+    },
+    [pi, sessionHintFor, globalSkills, openChat],
+  );
+
+  /**
+   * Re-spawn the active conversation's engine so it sees the allowlist its
+   * switches now say. Only when it is safe: the chat on screen, not mid-turn.
+   * A busy conversation keeps its current allowlist — the switch is recorded
+   * and takes effect the next time its engine comes up, which is the same
+   * promise `--skill` has always made, just without killing anyone's turn.
+   */
+  const respawnIfIdle = useCallback(async () => {
+    const workspace = ws.activeWorkspace;
+    const chat = ws.activeChat;
+    if (!workspace || !chat || pi.state.busy) return;
+    if (pi.engine.state !== "running") return;
+    await pi.stop();
+    await focus(workspace.path, chat);
+  }, [pi, ws, focus]);
 
   /**
    * Flip one skill's switch for the conversation on screen.
    *
-   * The new-session view has no chat yet, and the old wiring dropped the click
-   * on the floor there — configuring skills is itself a creation, the same way
-   * the first message adds and binds a chat (see `handleSend`).
+   * The new-session view has no chat yet, and configuring its skills is
+   * itself a creation — the same promise the first message makes: a chat is
+   * added and bound before anything is written to it.
    */
   const handleSetChatSkill = useCallback(
     async (key: string, on: boolean) => {
@@ -307,21 +325,23 @@ export default function App() {
       let chat = ws.activeChat;
       if (!chat) {
         chat = ws.addChat(workspace.path);
-        await openChat(workspace.path, chat);
+        await focus(workspace.path, chat);
       }
       ws.setChatSkill(workspace.path, chat.id, key, on);
+      await respawnIfIdle();
     },
-    [ws, openChat],
+    [ws, focus, respawnIfIdle],
   );
 
   const handleForgetChatSkill = useCallback(
-    (key: string) => {
+    async (key: string) => {
       const workspace = ws.activeWorkspace;
       const chat = ws.activeChat;
       if (!workspace || !chat) return;
       ws.forgetChatSkill(workspace.path, chat.id, key);
+      await respawnIfIdle();
     },
-    [ws],
+    [ws, respawnIfIdle],
   );
 
   /**
@@ -448,32 +468,26 @@ export default function App() {
         }
       }
       if (path) {
-        // Same trick as a workspace switch: find the conversation first, so a
-        // cold start opens it in one rebuild instead of two.
+        // Open the remembered conversation in its own engine — the same call
+        // every later switch makes; there is no separate cold-start path any
+        // more.
         const entry = ws.workspaces.find((item) => item.path === path);
-        const chat = entry?.chats.find((item) => item.id === entry.activeChat);
-        const hint = chat ? await sessionHintFor(path, chat) : null;
-        await pi.start(path, skillPathsRef.current, hint);
+        const chat = entry?.chats.find((item) => item.id === entry.activeChat) ?? null;
+        await focus(path, chat);
       }
     })();
-  }, [pi, sessionHintFor, ws]);
+  }, [pi, focus, ws]);
 
   /**
-   * Each engine start restores the active chat: resume its session file, or
-   * adopt the session pi just created when the chat has none yet.
+   * Adopt a session pi just created for a chat that had none yet.
    *
    * The generation check before binding is not defensive padding — it is the
-   * fix for a real corruption. Switching workspaces restarts pi, so two starts
-   * can overlap; each one calls `newSession`, and each new session belongs to
-   * the process that created it. If the *earlier* chain finishes last, it
-   * writes a session file path that its process never got to persist, and the
-   * chat ends up bound to a file that does not exist. Clicking that chat then
-   * asks pi to open a missing file, which fails and shows an empty chat — the
-   * conversation looks lost even though it is sitting in the other session
-   * file on disk.
-   *
-   * Comparing the generation makes the outcome order-independent: only the
-   * newest start may bind.
+   * fix for a real corruption: two overlapping chains that both create a
+   * session can finish out of order, and the slower one would otherwise bind a
+   * path its own process never got to persist. Only the newest generation may
+   * bind. With per-conversation engines the chains barely overlap any more,
+   * but an in-place settings reload still bumps the generation, so the rule
+   * stays.
    */
   useEffect(() => {
     const generation = pi.engineGeneration;
@@ -483,16 +497,15 @@ export default function App() {
     const workspace = ws.activeWorkspace;
     const chat = ws.activeChat;
     if (!workspace || !chat) {
-      // Nothing to open: the workspace has no conversations (or none is
-      // active). `start` no longer clears the transcript, so this is where the
-      // pane is dropped back to the new-session view — otherwise the previous
-      // workspace's conversation would sit there with no session behind it.
+      // Nothing open: the pane drops back to the new-session view — otherwise
+      // the previous conversation would sit there with no session behind it.
       clearTranscript();
       return;
     }
-
-    void openChat(workspace.path, chat);
-  }, [clearTranscript, pi.engineGeneration, ws.activeWorkspace?.path, ws.activeChat?.id, openChat]);
+    if (!chat.sessionFile && pi.state.sessionFile) {
+      void ws.bindSession(workspace.path, chat.id, pi.state.sessionFile);
+    }
+  }, [clearTranscript, pi.engineGeneration, pi.state.sessionFile, ws]);
 
   // ------------------------------------------------------------- rail wiring
 
@@ -501,90 +514,62 @@ export default function App() {
    * up starting pi once, in the last one clicked — otherwise the intermediate
    * starts cancel each other's session commands.
    */
-  const wantedWorkspace = useRef<string | null>(null);
-  const switchingWorkspace = useRef(false);
-
-  const applyWorkspace = useCallback(
-    async (path: string) => {
-      wantedWorkspace.current = path;
-      if (switchingWorkspace.current) return;
-      switchingWorkspace.current = true;
-      try {
-        while (wantedWorkspace.current) {
-          const target = wantedWorkspace.current;
-          wantedWorkspace.current = null;
-          // Resolve the conversation first, so the engine can come up already on
-          // it instead of building a runtime and then throwing it away for a
-          // `switch_session`.
-          const entry = ws.workspaces.find((item) => item.path === target);
-          const chat = entry?.chats.find((item) => item.id === entry.activeChat);
-          const hint = chat ? await sessionHintFor(target, chat) : null;
-          // The allowlist goes in too, so the switch state survives the change.
-          await pi.start(target, skillPathsRef.current, hint);
-        }
-      } finally {
-        wantedWorkspace.current = null;
-        switchingWorkspace.current = false;
-      }
-    },
-    [pi],
-  );
-
   const handleAddWorkspace = (path: string) => {
     const entry = ws.addWorkspace(path);
     if (!entry) return;
-    void applyWorkspace(entry.path);
+    void focus(entry.path, null);
   };
 
   const handleSelectWorkspace = (path: string) => {
     if (path === ws.activePath) return;
     ws.setActivePath(path);
-    void applyWorkspace(path);
+    // Open the workspace's remembered chat, not an empty pane: what the user
+    // clicked is "that project", and the project's last conversation is its
+    // face. A busy one is never interrupted — `attach` re-joins its engine.
+    const entry = ws.workspaces.find((item) => item.path === path);
+    const chat = entry?.chats.find((item) => item.id === entry.activeChat) ?? null;
+    void focus(path, chat);
   };
 
   const handleRemoveWorkspace = (path: string) => {
     ws.removeWorkspace(path);
     if (path !== ws.activePath) return;
     const next = ws.workspaces.find((entry) => entry.path !== path);
-    if (next) void applyWorkspace(next.path);
+    if (next) {
+      const entry = ws.workspaces.find((item) => item.path === next.path);
+      const chat = entry?.chats.find((item) => item.id === entry.activeChat) ?? null;
+      void focus(next.path, chat);
+    }
   };
 
   /**
-   * Every rail action now addresses a (workspace, chat) pair, because the rail
-   * lists all workspaces' chats at once.
-   *
-   * Opening a chat that lives in another workspace restarts the engine in that
-   * workspace's cwd first, and leaves the actual reopen to the generation
-   * effect: starting pi and opening in the same tick would run two session
-   * creations for one click — which is precisely how a chat ended up bound to
-   * a session file pi never wrote.
+   * Every rail action addresses a (workspace, chat) pair, because the rail
+   * lists all workspaces' chats at once — and opening any chat is now the same
+   * one call wherever it lives: focus moves the view, and the chat's own
+   * engine (spawned, or already running in the background) comes with it.
    */
   const handleAddChat = async (workspacePath: string) => {
     const chat = ws.addChat(workspacePath);
-    if (workspacePath !== ws.activePath) {
-      ws.selectChat(workspacePath, chat.id);
-      await applyWorkspace(workspacePath);
-      return;
-    }
-    // No sessionFile yet, so this takes the open-a-new-session path.
-    await openChat(workspacePath, chat);
+    if (workspacePath !== ws.activePath) ws.setActivePath(workspacePath);
+    await focus(workspacePath, chat);
   };
 
   /**
    * Send a prompt.
    *
-   * A workspace with nothing open has no session for the prompt to belong to, so
-   * the first message is itself the creation: a chat is added and bound before
-   * the prompt goes out. Without that the turn would land in pi's unbound
-   * startup session — visible on screen but unrepresented in the rail, and gone
-   * the moment the workspace is left. It is also why the composer stays usable
-   * in a workspace that has no sessions yet.
+   * A workspace with nothing open has no conversation for the prompt to belong
+   * to, so the first message is itself the creation: a chat is added and its
+   * engine spawned before the prompt goes out. Without that the turn would
+   * land in the throwaway `ws:` engine's session — visible on screen but
+   * unrepresented in the rail, and gone the moment the workspace is left. It
+   * is also why the composer stays usable in a workspace that has no
+   * sessions yet.
    */
   const handleSend = async (text: string, behavior?: "steer" | "followUp") => {
     const workspace = ws.activeWorkspace;
-    if (workspace && liveChats(workspace).length === 0) {
+    if (workspace && (!ws.activeChat || liveChats(workspace).length === 0)) {
       const chat = ws.addChat(workspace.path);
-      await openChat(workspace.path, chat);
+      await focus(workspace.path, chat);
     }
     await pi.send(text, behavior);
   };
@@ -593,16 +578,10 @@ export default function App() {
     const workspace = ws.workspaces.find((entry) => entry.path === workspacePath);
     const chat = workspace?.chats.find((entry) => entry.id === chatId);
     if (!chat) return;
-
-    if (workspacePath !== ws.activePath) {
-      ws.setActivePath(workspacePath);
-      ws.selectChat(workspacePath, chatId);
-      await applyWorkspace(workspacePath);
-      return;
-    }
-    if (chatId === ws.activeChat?.id) return;
+    if (workspacePath !== ws.activePath) ws.setActivePath(workspacePath);
+    if (chatId === ws.activeChat?.id && workspacePath === ws.activePath) return;
     ws.selectChat(workspacePath, chatId);
-    await openChat(workspacePath, chat);
+    await focus(workspacePath, chat);
   };
 
   const handleRenameChat = (workspacePath: string, chatId: string, name: string) => {
@@ -613,22 +592,23 @@ export default function App() {
   };
 
   /**
-   * Empty a workspace's pane when its last session goes away.
+   * Empty a workspace's pane when its last session goes away, and retire the
+   * removed chat's engine if it had one.
    *
-   * pi keeps running with whatever session it had, so without this the removed
-   * conversation would stay on screen next to a now-empty workspace. Starting a
-   * fresh *unbound* session clears the transcript and drops the pane back to the
-   * new-session view; the next message adopts it through `handleSend`.
+   * The pane moves to the workspace's own `ws:` slot — a throwaway engine
+   * whose session nothing is bound to, which is what the new-session view
+   * shows and what the next message adopts through `handleSend`. A removed
+   * chat whose turn was still running in the background loses its engine too:
+   * nobody will ever read that transcript again.
    */
   const clearPaneIfEmptied = (workspacePath: string, removedId: string) => {
-    // Only the pane on screen needs clearing, and only when the engine can
-    // answer — a stopped engine would turn this into a spurious error notice.
-    if (!ready || workspacePath !== ws.activePath) return;
+    void pi.stopSlot(removedId);
+    if (workspacePath !== ws.activePath) return;
     const workspace = ws.workspaces.find((entry) => entry.path === workspacePath);
     const leftLive = (workspace?.chats ?? []).some(
       (chat) => chat.id !== removedId && !chat.archivedAt,
     );
-    if (!leftLive) void pi.newSession();
+    if (!leftLive) void focus(workspacePath, null);
   };
 
   const handleRemoveChat = (workspacePath: string, chatId: string) => {
@@ -702,6 +682,7 @@ export default function App() {
               workspaces={ws.workspaces}
               activePath={ws.activePath}
               activeChatId={ws.activeChat?.id ?? null}
+              backgroundBusy={pi.backgroundBusy}
               engineRunning={ready}
               onAddWorkspace={handleAddWorkspace}
               onSelectWorkspace={handleSelectWorkspace}
@@ -755,6 +736,26 @@ export default function App() {
                 <QueueDock
                   steering={pi.state.queued.steering}
                   followUp={pi.state.queued.followUp}
+                  onInject={(kind, index) => {
+                    void pi.queueOp(kind, index, "inject").catch((error: unknown) => {
+                      pi.notify("warn", `插入失败：${String(error instanceof Error ? error.message : error)}`);
+                    });
+                  }}
+                  onEdit={(kind, index) => {
+                    void pi
+                      .queueOp(kind, index, "edit")
+                      .then((text) => {
+                        if (text !== null) setSeed({ text, nonce: Date.now() });
+                      })
+                      .catch((error: unknown) => {
+                        pi.notify("warn", `取回失败：${String(error instanceof Error ? error.message : error)}`);
+                      });
+                  }}
+                  onDelete={(kind, index) => {
+                    void pi.queueOp(kind, index, "delete").catch((error: unknown) => {
+                      pi.notify("warn", `删除失败：${String(error instanceof Error ? error.message : error)}`);
+                    });
+                  }}
                 />
 
                 {/* Reserved for the quick-command strip. Intentionally empty for now. */}
