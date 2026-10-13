@@ -20,6 +20,19 @@ export interface EngineStatus {
   cwd?: string;
   code?: number | null;
   location?: PiLocation;
+  /** Spawn counter — see {@link PiRecordEnvelope}. */
+  gen?: number;
+}
+
+/**
+ * What the host puts on `pi://record`: the parsed stdout line, stamped with the
+ * generation of the process that wrote it. Events from a replaced engine can
+ * land after the new one has started (the old pipe flushes when it dies), and
+ * a late `agent_start` would otherwise pin `busy` on a live, idle engine.
+ */
+export interface PiRecordEnvelope {
+  gen: number;
+  record: PiRecord;
 }
 
 export interface PiLogLine {
@@ -80,9 +93,11 @@ export const pi = {
 };
 
 export function onRecord(
-  handler: (record: PiRecord) => void,
+  handler: (record: PiRecord, gen: number) => void,
 ): Promise<UnlistenFn> {
-  return listen<PiRecord>("pi://record", (event) => handler(event.payload));
+  return listen<PiRecordEnvelope>("pi://record", (event) =>
+    handler(event.payload.record, event.payload.gen),
+  );
 }
 
 export function onStatus(

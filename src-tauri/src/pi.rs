@@ -203,6 +203,11 @@ struct PiInner {
     location: Option<PiLocation>,
     cwd: Option<PathBuf>,
     seq: u64,
+    /// Bumped with every spawn. Records are emitted with it so the frontend
+    /// can drop events from a process that has since been replaced — a late
+    /// `agent_start` from a dead pi would otherwise pin `busy` on forever,
+    /// and `agent_settled` never comes from a process that no longer exists.
+    gen: u64,
 }
 
 /// Owns the single `pi --mode rpc` child process backing the window.
@@ -219,6 +224,7 @@ impl PiHandle {
                 location: None,
                 cwd: None,
                 seq: 0,
+                gen: 0,
             })),
         }
     }
@@ -329,17 +335,22 @@ impl PiHandle {
         inner.location = Some(location.clone());
         inner.cwd = Some(workdir.clone());
         inner.seq = 0;
+        inner.gen += 1;
+        let gen = inner.gen;
 
+        // Emitted before any record of this generation can arrive: the
+        // frontend raises its accepted generation here, then filters records.
         let _ = app.emit(
             EVT_STATUS,
             json!({
                 "state": "running",
                 "cwd": workdir.to_string_lossy(),
                 "location": location,
+                "gen": gen,
             }),
         );
 
-        spawn_record_reader(app.clone(), stdout);
+        spawn_record_reader(app.clone(), stdout, gen);
         spawn_log_reader(app.clone(), stderr);
         spawn_exit_watcher(app.clone(), Arc::clone(&self.inner));
 
@@ -430,8 +441,9 @@ async fn shutdown(inner: &mut PiInner) {
 // Background readers
 // ---------------------------------------------------------------------------
 
-/// Split pi's stdout into records and forward each one to the webview.
-fn spawn_record_reader<R>(app: AppHandle, stream: R)
+/// Split pi's stdout into records and forward each one to the webview,
+/// stamped with the generation of the process that wrote it.
+fn spawn_record_reader<R>(app: AppHandle, stream: R, gen: u64)
 where
     R: AsyncRead + Unpin + Send + 'static,
 {
@@ -446,7 +458,7 @@ where
                     }
                     match serde_json::from_str::<Value>(line) {
                         Ok(record) => {
-                            let _ = app.emit(EVT_RECORD, record);
+                            let _ = app.emit(EVT_RECORD, json!({ "gen": gen, "record": record }));
                         }
                         Err(_) => {
                             let _ = app.emit(EVT_LOG, json!({ "stream": "stdout", "line": line }));
@@ -506,10 +518,11 @@ fn spawn_exit_watcher(app: AppHandle, inner: Arc<Mutex<PiInner>>) {
             };
 
             if exited {
+                let died_gen = guard.gen;
                 guard.child = None;
                 guard.stdin = None;
                 drop(guard);
-                let _ = app.emit(EVT_STATUS, json!({ "state": "exited", "code": code }));
+                let _ = app.emit(EVT_STATUS, json!({ "state": "exited", "code": code, "gen": died_gen }));
                 return;
             }
         }

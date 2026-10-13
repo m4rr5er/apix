@@ -107,6 +107,7 @@ export type Action =
    * thing it could do was lose facts the UI still needed.
    */
   | { kind: "clearTranscript" }
+  | { kind: "engineReset" }
   | { kind: "record"; record: PiRecord }
   | { kind: "notice"; level: NoticeItem["level"]; text: string }
   | { kind: "sessionName"; name: string | null };
@@ -474,6 +475,22 @@ export function reduce(state: State, action: Action): State {
       // `usage` and `busy` are engine readings too (the last turn's token counts,
       // whether pi is mid-turn), and `setStats(null)` already drops the meter.
       return { ...state, items: [], queued: { steering: [], followUp: [] } };
+    case "engineReset":
+      // A fresh pi process cannot have a turn in flight. `busy` is otherwise
+      // cleared only by `agent_settled`, which a killed process will never
+      // send — so without this, a restart mid-turn sticks the spinner on
+      // forever and 中断 has nothing to abort. Content stays: a restart is a
+      // stutter to survive, not a reason to blank the pane.
+      return {
+        ...state,
+        busy: false,
+        queued: { steering: [], followUp: [] },
+        items: state.items.map((item) =>
+          item.kind === "assistant" && item.streaming
+            ? { ...item, streaming: false }
+            : item,
+        ),
+      };
     case "notice":
       return push(state, {
         kind: "notice",

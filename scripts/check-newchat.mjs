@@ -248,6 +248,49 @@ check(
   !/kind: "reset"/.test(readFileSync(join("src", "hooks", "usePi.ts"), "utf8")),
 );
 
+// ------------------------------------------- 四、引擎重启不得把 busy 卡成永久真
+//
+// 实测事故：新工作区发第一条消息 → 旧进程记下 user 消息后引擎重启 →
+// 迟到的 agent_start 把 busy 钉在 true（它只能被 agent_settled 清掉，而死进程
+// 不会再发任何事件），中断按钮对着空闲的新进程发 abort，等于没按。
+// 修法两层：Rust 给每条 record 盖代际号、前端丢弃旧代际；start() 派发
+// engineReset 把 busy 强制归零（新进程上不可能有在跑的回合）。
+
+const busyState = reducer.reduce(reducer.initialState, { kind: "record", record: { type: "agent_start" } });
+check("前提：agent_start 会把 busy 置真", busyState.busy === true);
+
+const afterReset = reducer.reduce(
+  { ...busyState, queued: { steering: ["x"], followUp: [] }, items: [{ kind: "assistant", streaming: true, key: "a", text: "半句" }] },
+  { kind: "engineReset" },
+);
+check("engineReset 清掉 busy（新进程没有在跑的回合）", afterReset.busy === false);
+check("engineReset 清掉排队", afterReset.queued.steering.length === 0 && afterReset.queued.followUp.length === 0);
+check(
+  "engineReset 把流式行落盘（不再呼吸），但不删内容",
+  afterReset.items.length === 1 && afterReset.items[0].streaming === false && afterReset.items[0].text === "半句",
+);
+check("engineReset 不动模型与会话绑定", afterReset.model === busyState.model && afterReset.sessionFile === busyState.sessionFile);
+
+const usePiSrc = readFileSync(join("src", "hooks", "usePi.ts"), "utf8");
+const piRs = readFileSync(join("src-tauri", "src", "pi.rs"), "utf8");
+check(
+  "Rust 把每条 record 连同代际号发出（旧进程的事件带着自己的出生代数）",
+  /emit\(\s*EVT_RECORD\s*,\s*json!\(\{[^}]*"gen"/.test(piRs),
+  piRs.match(/emit\(\s*EVT_RECORD[^)]*\)/)?.[0]?.replace(/\s+/g, " ") ?? "",
+);
+check(
+  "running 状态事件也带代际号（前端先认代数，再收事件）",
+  /"state":\s*"running"[\s\S]{0,120}"gen"/.test(piRs),
+);
+check(
+  "usePi 丢弃旧代际的 record（stale 事件进不了 reducer）",
+  /engineGenRef\.current/.test(usePiSrc) && /gen\s*<\s*engineGenRef\.current/.test(usePiSrc),
+);
+check(
+  "usePi 的 start() 派发 engineReset",
+  /const start = useCallback\([\s\S]*?dispatch\(\{ kind: "engineReset" \}\)/.test(usePiSrc),
+);
+
 dropReducer();
 
 // ---------------------------------------------------------------------- 汇总

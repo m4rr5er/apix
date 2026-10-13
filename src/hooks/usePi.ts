@@ -128,6 +128,16 @@ export function usePi(extraVisibleProviders: readonly string[] = []) {
    * workspace.
    */
   const openSessionRef = useRef<string | null>(null);
+  /**
+   * The engine generation the UI currently accepts events from. The host bumps
+   * it with the `running` status before that process can emit any record, so a
+   * record stamped with an older generation is a late arrival from a dead
+   * process (the old stdout pipe flushes as it dies) and must not touch state —
+   * a stale `agent_start` would otherwise pin `busy` on an idle engine forever,
+   * because the process that owes the matching `agent_settled` no longer
+   * exists.
+   */
+  const engineGenRef = useRef(0);
   /** Responses we are waiting for, keyed by the command id we sent. */
   const pending = useRef(
     new Map<
@@ -170,7 +180,8 @@ export function usePi(extraVisibleProviders: readonly string[] = []) {
       else unlisteners.push(fn);
     };
 
-    const handleRecord = (record: PiRecord) => {
+    const handleRecord = (record: PiRecord, gen: number) => {
+      if (gen < engineGenRef.current) return;
       addLog("record", JSON.stringify(record));
 
       if (record.type === "response") {
@@ -188,6 +199,9 @@ export function usePi(extraVisibleProviders: readonly string[] = []) {
 
     void onRecord(handleRecord).then(keep);
     void onStatus((status) => {
+      if (typeof status.gen === "number" && status.gen > engineGenRef.current) {
+        engineGenRef.current = status.gen;
+      }
       setEngine(status);
       if (status.location) setLocation(status.location);
       // Keep the rail in sync with the directory pi actually received.
@@ -437,6 +451,9 @@ export function usePi(extraVisibleProviders: readonly string[] = []) {
       sessionOpRef.current += 1;
 
       setEngine({ state: "starting" });
+      // A new process has no turn in flight: drop `busy` here rather than wait
+      // for an `agent_settled` that a killed process will never send.
+      dispatch({ kind: "engineReset" });
       try {
         const result = await pi.start(cwd, skillPaths, session);
         // What the running engine was actually built with, for `syncSkills`.
