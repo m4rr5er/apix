@@ -53,6 +53,19 @@ export type SwitchOutcome =
 
 const LOG_LIMIT = 400;
 
+/**
+ * Record types pi emits per chunk — text deltas, thinking deltas, tool output
+ * updates, message part updates. They arrive many times per second while a
+ * turn runs; logging (and its state churn) is what made typing feel laggy in a
+ * long session. Everything else still lands in the log.
+ */
+const HOT_RECORDS = new Set([
+  "text_delta",
+  "thinking_delta",
+  "message_update",
+  "tool_execution_update",
+]);
+
 export function usePi(extraVisibleProviders: readonly string[] = []) {
   const [state, dispatch] = useReducer(reduce, initialState);
   const [engine, setEngine] = useState<EngineStatus>({ state: "stopped" });
@@ -238,7 +251,12 @@ export function usePi(extraVisibleProviders: readonly string[] = []) {
         return;
       }
       if (gen < (genBySlot.current.get(slot) ?? 0)) return;
-      addLog("record", JSON.stringify(record));
+      // The per-record log is diagnostics, and no panel renders it any more —
+      // stringifying every streaming chunk copied a 400-entry array and
+      // re-rendered the whole app once per token. The turn-boundary types stay.
+      if (!HOT_RECORDS.has(String(record.type))) {
+        addLog("record", JSON.stringify(record));
+      }
 
       if (record.type === "response") {
         settlePending(slot, record);

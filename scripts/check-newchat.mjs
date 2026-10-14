@@ -108,10 +108,10 @@ check(
   /: disabled\s*\n\s*\?\s*\(disabledReason \?\? "暂时不可用"\)/.test(BAR),
 );
 
-check("App 把「没有对话」也算进禁用条件", /disabled=\{!ready \|\| !conversation\}/.test(APP));
+check("App 把「没有对话」与「回合进行中」都算进禁用条件", /disabled=\{!ready \|\| !conversation \|\| pi\.state\.busy\}/.test(APP));
 check(
-  "App 给出禁用原因（引擎未就绪 / 没有对话内容）",
-  /disabledReason=\{[^}]*引擎还没就绪[^}]*没有对话内容[^}]*\}/.test(APP),
+  "App 给出禁用原因（引擎未就绪 / 没有对话内容 / 回合进行中）",
+  /引擎还没就绪/.test(APP) && /没有对话内容/.test(APP) && /等当前回合结束后再交接/.test(APP),
 );
 check(
   "conversation 就是 hasConversation(items)，不是另算一套",
@@ -120,6 +120,10 @@ check(
 check(
   "useHandoff.start 里有第二道闸（UI 只是第一道）",
   /if \(!hasConversation\(itemsRef\.current\)\) return;/.test(HOOK),
+);
+check(
+  "第二道闸也挡「回合进行中」（pi 一轮只收一条提示词，硬发会空转到 90 秒超时）",
+  /if \(busyRef\.current\) return;/.test(HOOK),
 );
 check(
   "第二道闸排在「开始交接」的副作用之前",

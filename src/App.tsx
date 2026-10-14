@@ -225,6 +225,23 @@ export default function App() {
     [],
   );
 
+  // Stable props for the memoised transcript rows. `React.memo` compares props
+  // by identity, and an inline arrow is a new function every render — which
+  // would throw the memoisation away exactly while a turn streams and every
+  // row is re-diffed several times a second.
+  const handleCopyTurnStable = useCallback(
+    (text: string) => {
+      void handleCopyTurn(text);
+    },
+    [handleCopyTurn],
+  );
+  const handleEditTurnStable = useCallback(
+    (entryId: string) => {
+      void handleEditTurn(entryId);
+    },
+    [handleEditTurn],
+  );
+
   const confirmDeleteTurn = useCallback(async () => {
     const target = pendingDelete;
     if (!target) return;
@@ -664,9 +681,17 @@ export default function App() {
             hot={contextHot}
             /* Nothing to compact on a session that has not been used yet, and
                starting a handoff there would burn a turn on tidy-up + a handoff
-               document for an empty workspace. */
-            disabled={!ready || !conversation}
-            disabledReason={!ready ? "引擎还没就绪" : "这个会话还没有对话内容"}
+               document for an empty workspace. Mid-turn is also no-go: pi takes
+               one prompt per run, so the handoff text would be rejected and the
+               button would sit in 「交接中」 until the 90s timeout. */
+            disabled={!ready || !conversation || pi.state.busy}
+            disabledReason={
+              !ready
+                ? "引擎还没就绪"
+                : !conversation
+                  ? "这个会话还没有对话内容"
+                  : "等当前回合结束后再交接"
+            }
             onCompact={() => void handoff.start()}
           />
         }
@@ -726,8 +751,8 @@ export default function App() {
                 turns={turns}
                 actionsEnabled={ready && !pi.state.busy}
                 resetNonce={rewindNonce}
-                onCopyTurn={(text) => void handleCopyTurn(text)}
-                onEditTurn={(entryId) => void handleEditTurn(entryId)}
+                onCopyTurn={handleCopyTurnStable}
+                onEditTurn={handleEditTurnStable}
                 onDeleteTurn={handleDeleteTurn}
               />
 

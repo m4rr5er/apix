@@ -125,6 +125,21 @@ check(
 
 const SKILL = bodies.get("apix-skill-author") ?? "";
 const MCP = bodies.get("apix-mcp-author") ?? "";
+const HAND = bodies.get("apix-context-handoff") ?? "";
+
+// 交接文档的落点与流程是「压缩上下文」按钮的实质内容：路径改了就要能被找到，
+// 哨兵改了 useHandoff 就对不上——两边都被这里钉住。
+check("handoff: 交接文档写在 note/handoff/（用户看得见的位置，不是点目录）",
+  /note\/handoff\//.test(HAND) && !/\.apix\/handoff\//.test(HAND));
+check("handoff: 四步齐备且有序（整理 → 写文档 → 首轮提示词 → 结束标记）",
+  /## 第一步：整理工作区/.test(HAND) && /## 第二步：写交接文档/.test(HAND) &&
+    /## 第三步：给用户首轮提示词/.test(HAND) && /## 第四步：输出结束标记/.test(HAND));
+check("handoff: 结束标记与 useHandoff 的哨兵逐字一致",
+  HAND.includes("[[APIX-HANDOFF-READY]]"));
+check("handoff: 要求保留细节（写给失忆的自己，宁可写多）",
+  /失忆/.test(HAND) && /宁可写多/.test(HAND));
+check("handoff: 禁止 skill 自己发起压缩",
+  /不要自己发起压缩/.test(HAND));
 
 check("skill-author: 讲清了 skill 放哪", /\.pi[\\/]agent[\\/]skills/.test(SKILL));
 check("skill-author: 讲了 id 的字符规则", /小写字母、数字和连字符/.test(SKILL));

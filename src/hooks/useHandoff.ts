@@ -58,14 +58,18 @@ export function useHandoff({
   const baseline = useRef(0);
   const itemsRef = useRef(items);
   itemsRef.current = items;
+  const busyRef = useRef(busy);
+  busyRef.current = busy;
 
   const start = useCallback(async () => {
     if (!engineRunning || phase === "running") return;
-    // Second gate. The toolbar already disables the button on a session that has
-    // not been used, so this is not the user-facing check: it is here so no
-    // future caller can start a handoff that would tidy an empty workspace and
-    // write a handoff document with nothing in it.
+    // Second gate (the button is disabled too, and now also mid-turn). This is
+    // not the user-facing check: it is here so no future caller can start a
+    // handoff that would tidy an empty workspace, or fire a prompt into a run
+    // that is still streaming — pi takes one prompt per turn and rejects the
+    // second, which would leave the button spinning until the 90s timeout.
     if (!hasConversation(itemsRef.current)) return;
+    if (busyRef.current) return;
 
     // Read the skill before touching any state: if the built-in cannot be read
     // there is no handoff to run, and reporting that is better than putting the

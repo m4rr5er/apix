@@ -3,7 +3,7 @@ name: apix-context-handoff
 description: Prepare a long session for context compaction. Tidies the workspace, writes a handoff document, and prints a ready-to-paste first prompt for the next session. Use when the user clicks APIX's "压缩上下文", or asks to compact context, hand off, wrap up, or checkpoint a long session.
 metadata:
   managed-by: apix
-  version: 1
+  version: 2
 ---
 
 <!-- apix-managed: APIX rewrites this file when this marker is present. Remove the marker to take ownership of it. -->
@@ -43,11 +43,12 @@ metadata:
 
 ## 第二步：写交接文档
 
-写在 `<工作区>/.apix/handoff/` 下：
+写在 `<工作区>/note/handoff/` 下（目录不存在就创建；`note/` 是用户看得见的位置，
+不要藏进 `.apix/` 这类点目录里）：
 
-- 编号文件：`.apix/handoff/<N>-<YYYYMMDD-HHmm>.md`
+- 编号文件：`note/handoff/<N>-<YYYYMMDD-HHmm>.md`
   `N` = 该目录下已有文档数 + 1（没有就从 1 开始），这是**第几次压缩会话**。
-- 同时把同样内容写到 `.apix/handoff/LATEST.md`，让路径保持稳定，下一轮不用去找编号。
+- 同时把同样内容写到 `note/handoff/LATEST.md`，让路径保持稳定，下一轮不用去找编号。
 
 按下面的模板写，**每一节都要有实质内容**。确实没有内容的节写「无」，不要整节删掉。
 

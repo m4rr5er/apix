@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from "react";
+import { memo, useEffect, useMemo, useRef } from "react";
 
 import { useElapsed } from "../hooks/useElapsed";
 import type { ForkMessage } from "../lib/protocol";
@@ -107,84 +107,30 @@ export function Transcript({
           if (item.kind === "user") {
             userIndex += 1;
             const turn = userIndex;
-            const entryId = entryForTurn.get(turn);
             return (
-              <div
-                className="row row-user"
+              <UserRow
                 key={item.key}
-                data-turn={entryId ? turn : undefined}
-                id={entryId ? `turn-${turn}` : undefined}
-              >
-                <div className="bubble">
-                  {item.text}
-                  {/*
-                    Rendered inside the bubble and parked outside its left edge.
-                    A right-aligned bubble always has empty space to its left, so
-                    the actions overlay nothing — and because they are taken out
-                    of flow the bubble stays flush right instead of being pushed
-                    84px inward by an invisible toolbar.
-                  */}
-                  {entryId && actionsEnabled ? (
-                    <div className="turn-actions">
-                      <IconButton title="复制这一轮提问" onClick={() => onCopyTurn(item.text)}>
-                        <IconCopy size={12} />
-                      </IconButton>
-                      <IconButton
-                        title="修改这一轮提问（把会话回退到这里，改成你要的再重新发送）"
-                        onClick={() => onEditTurn(entryId, item.text)}
-                      >
-                        <IconPencil size={12} />
-                      </IconButton>
-                      <IconButton
-                        title={
-                          turn === (turns?.length ?? 0) - 1
-                            ? "删除这一轮提问（连同它的回答）"
-                            : "删除这一轮提问，以及它之后的全部对话"
-                        }
-                        tone="danger"
-                        onClick={() => onDeleteTurn(entryId, turn, turns?.length ?? 0)}
-                      >
-                        <IconTrash size={12} />
-                      </IconButton>
-                    </div>
-                  ) : null}
-                </div>
-              </div>
+                item={item}
+                turn={turn}
+                entryId={entryForTurn.get(turn)}
+                totalTurns={turns?.length ?? 0}
+                actionsEnabled={actionsEnabled}
+                onCopyTurn={onCopyTurn}
+                onEditTurn={onEditTurn}
+                onDeleteTurn={onDeleteTurn}
+              />
             );
           }
 
           if (item.kind === "assistant") {
-            return (
-              <div className="row row-assistant" key={item.key}>
-                {item.thinking ? (
-                  <details className="thinking">
-                    <summary>思考过程（{item.thinking.length} 字符）</summary>
-                    <div className="thinking-body">{item.thinking}</div>
-                  </details>
-                ) : null}
-                {item.text ? (
-                  <div className="rich">
-                    <RichText text={item.text} />
-                  </div>
-                ) : null}
-                {item.streaming && !item.text ? <span className="caret" /> : null}
-              </div>
-            );
+            return <AssistantRow key={item.key} item={item} />;
           }
 
           if (item.kind === "tool") {
-            return (
-              <div className="row row-tool" key={item.key}>
-                <ToolCard item={item} />
-              </div>
-            );
+            return <ToolRow key={item.key} item={item} />;
           }
 
-          return (
-            <div className={`row row-notice notice-${item.level}`} key={item.key}>
-              <div className="notice">{item.text}</div>
-            </div>
-          );
+          return <NoticeRow key={item.key} item={item} />;
         })}
 
         {busy ? <WorkingRow /> : null}
@@ -194,6 +140,118 @@ export function Transcript({
     </div>
   );
 }
+
+/**
+ * One prompt bubble, with the turn actions parked in the empty space to its
+ * left (see the comment in the body).
+ *
+ * Memoised, and the reducer keeps an untouched item's object identity across
+ * dispatches — so while a turn streams, only the one assistant row at the
+ * bottom re-renders per token, not the whole history. Without this, a long
+ * session re-renders (and re-parses) every row several times a second, which
+ * is what made the composer feel like it was typing through wet sand.
+ */
+const UserRow = memo(function UserRow({
+  item,
+  turn,
+  entryId,
+  totalTurns,
+  actionsEnabled,
+  onCopyTurn,
+  onEditTurn,
+  onDeleteTurn,
+}: {
+  item: Extract<Item, { kind: "user" }>;
+  turn: number;
+  entryId: string | undefined;
+  totalTurns: number;
+  actionsEnabled: boolean;
+  onCopyTurn: (text: string) => void;
+  onEditTurn: (entryId: string, text: string) => void;
+  onDeleteTurn: (entryId: string, position: number, total: number) => void;
+}) {
+  return (
+    <div
+      className="row row-user"
+      data-turn={entryId ? turn : undefined}
+      id={entryId ? `turn-${turn}` : undefined}
+    >
+      <div className="bubble">
+        {item.text}
+        {/*
+          Rendered inside the bubble and parked outside its left edge.
+          A right-aligned bubble always has empty space to its left, so
+          the actions overlay nothing — and because they are taken out
+          of flow the bubble stays flush right instead of being pushed
+          84px inward by an invisible toolbar.
+        */}
+        {entryId && actionsEnabled ? (
+          <div className="turn-actions">
+            <IconButton title="复制这一轮提问" onClick={() => onCopyTurn(item.text)}>
+              <IconCopy size={12} />
+            </IconButton>
+            <IconButton
+              title="修改这一轮提问（把会话回退到这里，改成你要的再重新发送）"
+              onClick={() => onEditTurn(entryId, item.text)}
+            >
+              <IconPencil size={12} />
+            </IconButton>
+            <IconButton
+              title={
+                turn === totalTurns - 1
+                  ? "删除这一轮提问（连同它的回答）"
+                  : "删除这一轮提问，以及它之后的全部对话"
+              }
+              tone="danger"
+              onClick={() => onDeleteTurn(entryId, turn, totalTurns)}
+            >
+              <IconTrash size={12} />
+            </IconButton>
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
+});
+
+const AssistantRow = memo(function AssistantRow({
+  item,
+}: {
+  item: Extract<Item, { kind: "assistant" }>;
+}) {
+  return (
+    <div className="row row-assistant" key={item.key}>
+      {item.thinking ? (
+        <details className="thinking">
+          <summary>思考过程（{item.thinking.length} 字符）</summary>
+          <div className="thinking-body">{item.thinking}</div>
+        </details>
+      ) : null}
+      {item.text ? (
+        <div className="rich">
+          <RichText text={item.text} />
+        </div>
+      ) : null}
+      {item.streaming && !item.text ? <span className="caret" /> : null}
+    </div>
+  );
+});
+
+const ToolRow = memo(function ToolRow({ item }: { item: Extract<Item, { kind: "tool" }> }) {
+  return (
+    <div className="row row-tool">
+      <ToolCard item={item} />
+    </div>
+  );
+});
+
+const NoticeRow = memo(function NoticeRow({ item }: { item: Extract<Item, { kind: "notice" }> }) {
+  return (
+    <div className={`row row-notice notice-${item.level}`}>
+      <div className="notice">{item.text}</div>
+    </div>
+  );
+});
 
 /**
  * The generating indicator: a rotating arc, the label, and this turn's elapsed
