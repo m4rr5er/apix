@@ -729,14 +729,10 @@ kbd {
   flex-direction: column;
 }
 
-/* 长会话的性能闸：离屏的回合行跳过布局与绘制，只按估算高度占位。
-   没有这条，会话攒到几百屏后每次输入框 resize（读 scrollHeight，强制
-   整页 reflow）都要把整个 transcript 重新排一遍——「用久了打字发涩」
-   就是它。`auto` 关键字让估算高度记住各行实际尺寸，滚动条不跳。 */
-.transcript > .row {
-  content-visibility: auto;
-  contain-intrinsic-size: auto 120px;
-}
+/* 这里曾经用过 `content-visibility: auto` 跳过离屏行的布局。别再加回来：
+   离屏行按 contain-intrinsic-size 估算占位，滚进视口才按真实高度排版，
+   于是总高反复变化 —— 表现为滚动时页面和滚动条一起上下跳，而且越长越糟。
+   长会话的性能由「行级 memo + 热 record 不进日志」承担，那两项没有这个代价。 */
 
 .transcript > .row + .row {
   margin-top: 12px;

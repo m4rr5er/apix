@@ -303,11 +303,22 @@ export default function App() {
       const skills = enabledSkillPaths(pi.skills, globalSkills, chat?.skills ?? {});
       const hint = chat ? await sessionHintFor(workspacePath, chat) : null;
       const wasLive = await pi.attach(slot, { cwd: workspacePath, skills, session: hint });
-      // A live engine kept whatever session its last operation opened. Normal
-      // switches re-attach to exactly that (the hint matched), but a rebind
-      // since then — an adopt, a rewind — means the engine is on the old file,
-      // and only `openChat` knows how to reconcile the two.
-      if (wasLive && chat) void openChat(workspacePath, chat);
+      // Reconcile the engine with the chat's binding — always, not only when the
+      // engine was already live.
+      //
+      // The old single-engine code got this for free: every open went through
+      // `openChat`, which resolved the chat's session and issued a
+      // `switch_session` when the engine was on anything else. With a process
+      // per conversation that safety net was dropped, and it turned out to be
+      // load-bearing: whenever the `--session` hint cannot be produced (a
+      // resolution that lands on "reopen", an unbound chat, a stale binding),
+      // the fresh engine came up on a brand-new empty session and the pane
+      // showed the new-session page for a conversation full of history.
+      //
+      // Cheap when the hint matched: `openSession` compares against the path the
+      // engine was started on and only reloads messages.
+      if (chat) void openChat(workspacePath, chat);
+      void wasLive;
     },
     [pi, sessionHintFor, globalSkills, openChat],
   );
@@ -748,6 +759,7 @@ export default function App() {
               <Transcript
                 items={pi.state.items}
                 busy={pi.state.busy}
+                opening={pi.opening}
                 turns={turns}
                 actionsEnabled={ready && !pi.state.busy}
                 resetNonce={rewindNonce}

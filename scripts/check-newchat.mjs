@@ -295,6 +295,55 @@ check(
   /const start = useCallback\([\s\S]*?dispatch\(\{ kind: "engineReset" \}\)/.test(usePiSrc),
 );
 
+// ------------------------------------- 五、切会话要立刻有内容，而不是先显示「新会话」
+//
+// 每会话一个进程之后，切过去要等 pi 起进程（1-2s）再问它要消息；这期间界面
+// 显示的是「新会话」页 —— 看起来像会话丢了。修法两条：按会话缓存上次的
+// transcript 先铺上去；没有缓存（首次打开）时显示「正在打开会话…」而不是
+// 「新会话」。
+
+const cachedItems = [
+  { kind: "user", key: "u1", text: "之前的问题" },
+  { kind: "assistant", key: "a1", text: "之前的回答", streaming: true },
+];
+const loaded = reducer.reduce(
+  { ...live, items: [] },
+  { kind: "loadItems", items: cachedItems },
+);
+check(
+  "loadItems 把缓存内容铺上去（切会话的第一帧就有内容）",
+  loaded.items.length === 2 && loaded.items[1].text === "之前的回答",
+);
+check(
+  "loadItems 把流式标记落盘（缓存里的半截行不会一直呼吸）",
+  loaded.items[1].streaming === false,
+);
+check(
+  "loadItems 不动模型与会话绑定（那些是引擎的读数，稍后由 get_state 校正）",
+  loaded.model === live.model && loaded.sessionFile === live.sessionFile,
+);
+
+check(
+  "attach 用 loadItems 铺缓存（不再先清空）",
+  /const cached = itemsBySlot\.current\.get\(slot\)/.test(usePiSrc) &&
+    /dispatch\(\{ kind: "loadItems", items: cached \?\? \[\] \}\)/.test(usePiSrc),
+);
+check("缓存有上限（浏览很多会话不会无限涨内存）", /SLOT_CACHE_LIMIT/.test(usePiSrc));
+check(
+  "冷启动且无缓存时才进入「打开中」（有缓存就直接显示内容）",
+  /setOpening\(!cached \|\| cached\.length === 0\)/.test(usePiSrc),
+);
+check(
+  "get_messages 一回来就退出「打开中」（空会话也要及时切回新会话视图）",
+  /command === "get_messages"\) setOpening\(false\)/.test(usePiSrc),
+);
+check(
+  "Transcript 支持「打开中」态（不是所有空白都叫新会话）",
+  /opening: boolean/.test(readFileSync(join("src", "components", "Transcript.tsx"), "utf8")) &&
+    /正在打开会话/.test(readFileSync(join("src", "components", "Transcript.tsx"), "utf8")),
+);
+check("App 把 opening 传给 Transcript", /opening=\{pi\.opening\}/.test(APP));
+
 dropReducer();
 
 // ---------------------------------------------------------------------- 汇总

@@ -48,9 +48,8 @@ check(
 );
 
 check(
-  "离屏回合行跳过布局（content-visibility + 估算高度）",
-  /\.transcript > \.row\s*\{[^}]*content-visibility:\s*auto/.test(css) &&
-    /contain-intrinsic-size:\s*auto/.test(css),
+  "回合行不得用 content-visibility（离屏估算高度会让滚动上下跳）",
+  !/\.transcript > \.row\s*\{[^}]*content-visibility/.test(css),
 );
 
 let failed = 0;

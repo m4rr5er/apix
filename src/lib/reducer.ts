@@ -107,6 +107,7 @@ export type Action =
    * thing it could do was lose facts the UI still needed.
    */
   | { kind: "clearTranscript" }
+  | { kind: "loadItems"; items: Item[] }
   | { kind: "engineReset" }
   | { kind: "record"; record: PiRecord }
   | { kind: "notice"; level: NoticeItem["level"]; text: string }
@@ -475,6 +476,21 @@ export function reduce(state: State, action: Action): State {
       // `usage` and `busy` are engine readings too (the last turn's token counts,
       // whether pi is mid-turn), and `setStats(null)` already drops the meter.
       return { ...state, items: [], queued: { steering: [], followUp: [] } };
+    case "loadItems":
+      // Render a conversation's cached transcript the instant the view switches
+      // to it. The engine for that chat is still starting (or being re-joined),
+      // and showing the new-session page for a chat full of history was the
+      // whole complaint. Nothing else is touched: the engine's own readings
+      // (model, session, busy) arrive a moment later and stay authoritative.
+      // Streaming flags are dropped — a cached mid-turn row must not pulse
+      // forever if that turn has since ended.
+      return {
+        ...state,
+        items: action.items.map((item) =>
+          item.kind === "assistant" && item.streaming ? { ...item, streaming: false } : item,
+        ),
+        queued: { steering: [], followUp: [] },
+      };
     case "engineReset":
       // A fresh pi process cannot have a turn in flight. `busy` is otherwise
       // cleared only by `agent_settled`, which a killed process will never

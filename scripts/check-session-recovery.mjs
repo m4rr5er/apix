@@ -239,6 +239,38 @@ async function main() {
     );
   }
 
+  // ------------------------------------------- 会话清单的字段名必须两边一致
+  //
+  // 实测事故：Rust 的 SessionListing/SessionFileInfo 漏了
+  // `#[serde(rename_all = "camelCase")]`，于是前端拿到的 `recordedExists`
+  // 是 undefined（读作「登记的文件没了」）。所有普通会话因此被判成 reopen，
+  // 引擎以「不带 --session」的方式冷启动 —— 满屏历史的会话打开是空白新会话。
+  // 旧版每次打开都多走一次 openChat（内含 switch_session）把它盖住了，
+  // 改成每会话一个进程之后就暴露了。字段名是跨语言的契约，钉在这里。
+  const rustConfig = readFileSync(resolve("src-tauri/src/config.rs"), "utf8");
+  for (const struct of ["SessionFileInfo", "SessionListing"]) {
+    const decl =
+      new RegExp(`#\\[derive\\(Serialize\\)\\]\\s*#\\[serde\\(rename_all = "camelCase"\\)\\]\\s*pub struct ${struct}`)
+        .test(rustConfig);
+    check(`${struct} 带 camelCase 序列化（否则前端字段全是 undefined）`, decl);
+  }
+  const bridgeTypes = readFileSync(resolve("src/lib/configBridge.ts"), "utf8");
+  check(
+    "前端按 camelCase 读这几个字段（与上面的 serde 声明成对）",
+    /recordedExists: boolean/.test(bridgeTypes) &&
+      /fileName: string/.test(bridgeTypes) &&
+      /modifiedMs: number/.test(bridgeTypes),
+  );
+
+  // 第二道保险：focus 之后无条件收敛一次，即使 hint 拿不到也不会开成空白会话。
+  const appSrc = readFileSync(resolve("src/App.tsx"), "utf8");
+  const focusBody = /const focus = useCallback\([\s\S]*?\n  \}, \[/.exec(appSrc)?.[0] ?? "";
+  check(
+    "focus 无条件调 openChat 收敛（hint 落空时也不会开成新会话）",
+    /if \(chat\) void openChat\(workspacePath, chat\);/.test(focusBody),
+    focusBody.replace(/\s+/g, " ").slice(0, 120),
+  );
+
   // --------------------------------------------------------------- 真实回放
   for (const scenario of REAL_CASES) {
     const r = resolveChatSession({

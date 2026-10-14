@@ -31,7 +31,7 @@ import {
   type RpcSessionState,
   type SessionStats,
 } from "../lib/protocol";
-import { initialState, reduce } from "../lib/reducer";
+import { initialState, reduce, type Item } from "../lib/reducer";
 import { sameSessionPath } from "../lib/sessionRecovery";
 import {
   removeTask,
@@ -52,6 +52,9 @@ export type SwitchOutcome =
   | { opened: false; cancelled: boolean; reason: string };
 
 const LOG_LIMIT = 400;
+
+/** How many conversations' transcripts to keep for instant re-painting. */
+const SLOT_CACHE_LIMIT = 12;
 
 /**
  * Record types pi emits per chunk — text deltas, thinking deltas, tool output
@@ -176,6 +179,18 @@ export function usePi(extraVisibleProviders: readonly string[] = []) {
   /** Slots that missed a settings reload while backgrounded; reloaded on attach. */
   const dirtyReloadRef = useRef(new Set<string>());
   /**
+   * The last transcript each slot showed, so switching back to a conversation
+   * paints its content in the same frame.
+   *
+   * A conversation is a process now: coming back to one may mean waiting for
+   * pi to boot and answer `get_messages`, and showing the new-session page
+   * during that wait is what made switching feel broken. The cache is
+   * presentation only — the engine's own reading replaces it a moment later,
+   * and it is capped so browsing many chats cannot grow without bound.
+   */
+  const itemsBySlot = useRef(new Map<string, Item[]>());
+  const [opening, setOpening] = useState(false);
+  /**
    * Pending RPC responses, per slot: leaving a chat rejects *its* waiters (the
    * chains bail like they do on a restart), but a different slot's in-flight
    * request must survive the switch untouched.
@@ -216,6 +231,26 @@ export function usePi(extraVisibleProviders: readonly string[] = []) {
   }, []);
 
   const clearLogs = useCallback(() => setLogs([]), []);
+
+  /**
+   * Mirror the visible transcript into the per-slot cache.
+   *
+   * Keyed by the *active* slot on purpose: `state.items` always belongs to
+   * whoever is on screen, and a background slot's own live rows are re-read
+   * from pi when it comes back.
+   */
+  useEffect(() => {
+    const slot = slotRef.current;
+    if (!slot) return;
+    const cache = itemsBySlot.current;
+    cache.delete(slot);
+    cache.set(slot, state.items);
+    while (cache.size > SLOT_CACHE_LIMIT) {
+      const oldest = cache.keys().next().value as string | undefined;
+      if (oldest === undefined || oldest === slot) break;
+      cache.delete(oldest);
+    }
+  }, [state.items]);
 
   // ---------------------------------------------------------------- events
   useEffect(() => {
@@ -260,6 +295,9 @@ export function usePi(extraVisibleProviders: readonly string[] = []) {
 
       if (record.type === "response") {
         settlePending(slot, record);
+        // The transcript has now been read from pi: whatever the cache held is
+        // either confirmed or replaced, so "opening" is over either way.
+        if ((record as { command?: string }).command === "get_messages") setOpening(false);
       }
 
       if (record.type === "extension_ui_request") {
@@ -570,6 +608,7 @@ export function usePi(extraVisibleProviders: readonly string[] = []) {
       } catch (error) {
         dispatch({ kind: "notice", level: "error", text: String(error) });
         setEngine({ state: "exited", slot });
+        setOpening(false);
         addLog("app", `启动失败：${String(error)}`);
       }
     },
@@ -600,10 +639,15 @@ export function usePi(extraVisibleProviders: readonly string[] = []) {
       setActiveSlot(slot);
       // Chains started for the slot we just left must not report back.
       sessionOpRef.current += 1;
-      dispatch({ kind: "clearTranscript" });
+      const cached = itemsBySlot.current.get(slot);
+      // Paint whatever this conversation last showed, in this very frame —
+      // before the engine is even asked. An empty cache means a first visit,
+      // which is what the "opening" pane is for.
+      dispatch({ kind: "loadItems", items: cached ?? [] });
       dispatch({ kind: "engineReset" });
       setStats(null);
       if (liveSlotsRef.current.has(slot)) {
+        setOpening(false);
         setEngine({ state: "running", slot, cwd: opts.cwd ?? undefined });
         void pi.send(slot, { type: "get_state" }).catch(() => undefined);
         void pi.send(slot, { type: "get_messages" }).catch(() => undefined);
@@ -613,12 +657,14 @@ export function usePi(extraVisibleProviders: readonly string[] = []) {
         }
         return true;
       }
+      // Cold start: nothing to show yet, so say "opening" rather than letting
+      // the new-session backdrop claim this conversation is empty.
+      setOpening(!cached || cached.length === 0);
       await start(opts.cwd, opts.skills, opts.session);
       return false;
     },
     [start],
   );
-
   /**
    * Leave the current slot.
    *
@@ -1144,6 +1190,8 @@ export function usePi(extraVisibleProviders: readonly string[] = []) {
     /** The conversation slot driving the view, and the background turn tracker. */
     activeSlot,
     backgroundBusy,
+    /** True while a conversation's engine is starting and nothing is on screen yet. */
+    opening,
     attach,
     detach,
     stopSlot,

@@ -668,7 +668,13 @@ pub fn apix_reload_extension() -> Result<PathBuf, String> {
 // ---------------------------------------------------------------------------
 
 /// One `.jsonl` session file pi wrote for a workspace.
+///
+/// `camelCase` is load-bearing: the frontend reads `fileName` / `modifiedMs`,
+/// and without the rename serde emits `file_name` / `modified_ms` — every extra
+/// stamp parsed as `null`, so the recover-the-conversation branch could never
+/// fire.
 #[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SessionFileInfo {
     pub path: String,
     pub file_name: String,
@@ -678,7 +684,15 @@ pub struct SessionFileInfo {
 }
 
 /// The inventory APIX needs to decide how to reopen a chat.
+///
+/// `camelCase` for the same reason as [`SessionFileInfo`] — and here it was
+/// worse: `recorded_exists` arrived as `undefined`, which reads as "the
+/// recorded file is gone", so every ordinary chat resolved to `reopen` and its
+/// engine was started *without* `--session` (a blank pane for a conversation
+/// full of history). The old single-engine code hid this behind an
+/// unconditional `switch_session`; a process per conversation no longer does.
 #[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SessionListing {
     /// The session directory pi would use for this cwd (may not exist yet).
     pub dir: String,

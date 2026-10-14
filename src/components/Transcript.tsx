@@ -24,6 +24,7 @@ const STICK_THRESHOLD = 80;
 export function Transcript({
   items,
   busy,
+  opening,
   turns,
   actionsEnabled,
   resetNonce,
@@ -33,6 +34,13 @@ export function Transcript({
 }: {
   items: Item[];
   busy: boolean;
+  /**
+   * True while this conversation's engine is still starting. The pane then says
+   * "opening" instead of "new session": a chat that is merely slow to come up
+   * must not be presented as empty — that reading is what made switching look
+   * like it had lost the conversation.
+   */
+  opening: boolean;
   /**
    * pi's view of the prompts it can rewind to, in transcript order. `null` while
    * unknown; the count is checked against the rendered prompts before any
@@ -93,14 +101,22 @@ export function Transcript({
     <div className="transcript-wrap">
       <div className="transcript" ref={boxRef} onScroll={onScroll}>
         {fresh ? (
-          <div className="transcript-empty">
-            <p className="empty-title">新会话</p>
-            <p className="empty-hint">
-              pi 已在当前工作目录就绪。给它一个任务，例如
-              <code className="inline-code">列出当前目录前 10 个文件</code>
-              。
-            </p>
-          </div>
+          opening ? (
+            <div className="transcript-empty">
+              <p className="empty-hint">
+                <Spinner size={14} className="working-spinner" /> 正在打开会话…
+              </p>
+            </div>
+          ) : (
+            <div className="transcript-empty">
+              <p className="empty-title">新会话</p>
+              <p className="empty-hint">
+                pi 已在当前工作目录就绪。给它一个任务，例如
+                <code className="inline-code">列出当前目录前 10 个文件</code>
+                。
+              </p>
+            </div>
+          )
         ) : null}
 
         {items.map((item) => {
