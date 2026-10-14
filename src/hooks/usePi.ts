@@ -57,6 +57,17 @@ const LOG_LIMIT = 400;
 const SLOT_CACHE_LIMIT = 12;
 
 /**
+ * Record types that mean "the last reading of this conversation is void".
+ *
+ * Compaction replaces the history with a summary, and pi answers
+ * `contextUsage: { tokens: null, percent: null }` until the next model call
+ * (measured) — so the meter must be re-read, or it keeps showing the *pre*-
+ * compaction figure as if the summarising had not happened. A number that
+ * never moves after a compression looks like the compression failed.
+ */
+const VOIDS_STATS = new Set(["compaction_end"]);
+
+/**
  * Record types pi emits per chunk — text deltas, thinking deltas, tool output
  * updates, message part updates. They arrive many times per second while a
  * turn runs; logging (and its state churn) is what made typing feel laggy in a
@@ -105,6 +116,8 @@ export function usePi(extraVisibleProviders: readonly string[] = []) {
   const sessionOpRef = useRef(0);
   /** Session totals from pi, used by the status bar. */
   const [stats, setStats] = useState<SessionStats | null>(null);
+  /** Bumped when a record voids the current reading, to force a re-read. */
+  const [statsNonce, setStatsNonce] = useState(0);
   /**
    * Everything pi reports, before the picker's filter runs, plus the ids
    * `models.json` declares. Both are kept raw so the Settings page can show what
@@ -293,6 +306,8 @@ export function usePi(extraVisibleProviders: readonly string[] = []) {
         addLog("record", JSON.stringify(record));
       }
 
+      if (VOIDS_STATS.has(String(record.type))) setStatsNonce((value) => value + 1);
+
       if (record.type === "response") {
         settlePending(slot, record);
         // The transcript has now been read from pi: whatever the cache held is
@@ -415,6 +430,7 @@ export function usePi(extraVisibleProviders: readonly string[] = []) {
     state.model,
     state.thinkingLevel,
     engineGeneration,
+    statsNonce,
     request,
   ]);
 

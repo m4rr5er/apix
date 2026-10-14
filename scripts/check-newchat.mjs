@@ -344,6 +344,25 @@ check(
 );
 check("App 把 opening 传给 Transcript", /opening=\{pi\.opening\}/.test(APP));
 
+// ------------------------------- 六、压缩完了，进度条不能继续显示压缩前的数字
+//
+// pi 压缩后返回 contextUsage { tokens: null, percent: null }（实测），要等下一轮
+// 才报数。如果 APIX 不重取，进度条就永远挂着压缩前的 718K —— 看起来像「压缩没
+// 生效」。所以 compaction_end 必须让 stats 重读一次。
+check(
+  "compaction_end 会让 stats 重读（否则进度条挂着压缩前的旧值）",
+  /VOIDS_STATS = new Set\(\["compaction_end"\]\)/.test(usePiSrc) &&
+    /VOIDS_STATS\.has\(String\(record\.type\)\)\) setStatsNonce/.test(usePiSrc) &&
+    /statsNonce,/.test(usePiSrc),
+);
+check(
+  "进度条对「刚压缩过、pi 还没报数」有专门说法（不是显示成 0%）",
+  /used === null/.test(readFileSync(join("src", "components", "StatusBar.tsx"), "utf8")) &&
+    /上下文用量未知（刚压缩过，等下一次回复才报数）/.test(
+      readFileSync(join("src", "components", "StatusBar.tsx"), "utf8"),
+    ),
+);
+
 dropReducer();
 
 // ---------------------------------------------------------------------- 汇总
