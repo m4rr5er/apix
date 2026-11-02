@@ -1,0 +1,49 @@
+name: Mac Test Build
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-macos-arm64:
+    name: Build macOS arm64 test artifact
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24.13.0
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate app icon
+        run: npm run make-icon
+
+      - name: Build macOS arm64 package
+        run: npm run build:fast && npx electron-builder --mac dmg zip --arm64 --publish never
+        env:
+          NODE_OPTIONS: "--max-old-space-size=8192"
+
+      # 打包后门禁：bundle 必须有有效签名（无 Apple 证书时靠 build.mac.identity 的显式
+      # ad-hoc，原因见 docs/release-process.md「打包验证」与 issue #347）。
+      - name: Verify macOS bundle signature
+        run: node scripts/verify-mac-signature.mjs
+
+      - name: Upload macOS test artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: PiDeck-macos-arm64-test
+          if-no-files-found: error
+          path: |
+            release/*.dmg
+            release/*.zip
+            release/*.blockmap
+            release/latest-mac.yml

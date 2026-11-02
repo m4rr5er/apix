@@ -1,7 +1,0 @@
-{
-  "$schema": "../gen/schemas/desktop-schema.json",
-  "identifier": "tray-menu",
-  "description": "托盘菜单弹窗：只需要事件能力。它渲染两个菜单项，动作全部通过应用自己的命令完成，因此不需要 dialog / opener / 文件系统等任何权限。",
-  "windows": ["tray-menu"],
-  "permissions": ["core:default"]
-}

@@ -1,0 +1,101 @@
+import assert from "node:assert/strict";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync, readFileSync } from "node:fs";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
+import test from "node:test";
+import { loadTsCommonJs } from "./helpers/loadTsCommonJs.mjs";
+
+let builtInExtensionsModule = null;
+
+/**
+ * 统一走 loadTsCommonJs：builtInExtensions.ts 现已依赖 ./builtInExtensionsManifest
+ * （覆盖层清单校验），裸 require 解析不了无扩展名的 .ts 相对导入。
+ * 模块级缓存保证多次调用共享同一实例（覆盖层可用性缓存住在模块内）。
+ */
+function loadBuiltInExtensionsModule() {
+	if (!builtInExtensionsModule) {
+		builtInExtensionsModule = loadTsCommonJs("src/main/extensions/builtInExtensions.ts");
+	}
+	return builtInExtensionsModule;
+}
+
+function sameArgs(actual, expected) {
+	// vm 沙箱数组与主 realm deepStrictEqual 可能因原型不同失败
+	assert.equal(JSON.stringify([...actual]), JSON.stringify(expected));
+}
+
+test("appendBuiltInExtensionArgs adds repeated --extension flags", () => {
+	const { appendBuiltInExtensionArgs } = loadBuiltInExtensionsModule();
+	const next = appendBuiltInExtensionArgs(["--mode", "rpc"], ["C:\\app\\resources\\extensions\\pi-deck-todo.ts", "C:\\app\\resources\\extensions\\pi-deck-plan-mode.ts"]);
+	sameArgs(next, ["--mode", "rpc", "--extension", "C:\\app\\resources\\extensions\\pi-deck-todo.ts", "--extension", "C:\\app\\resources\\extensions\\pi-deck-plan-mode.ts"]);
+});
+
+test("appendBuiltInExtensionArgs skips when noExtensions is true", () => {
+	const { appendBuiltInExtensionArgs } = loadBuiltInExtensionsModule();
+	const next = appendBuiltInExtensionArgs(["--mode", "rpc", "--no-extensions"], ["/tmp/pi-deck-todo.ts"], { noExtensions: true });
+	sameArgs(next, ["--mode", "rpc", "--no-extensions"]);
+});
+
+test("listActiveBuiltInExtensionPaths respects removedBuiltIn and missing files", () => {
+	const { listActiveBuiltInExtensionPaths, BUILT_IN_EXTENSIONS } = loadBuiltInExtensionsModule();
+	const root = mkdtempSync(join(tmpdir(), "pideck-builtin-ext-"));
+	const extDir = join(root, "resources", "extensions");
+	mkdirSync(extDir, { recursive: true });
+	// 只写入 ask + todo，故意不写 plan/nul，验证缺失跳过
+	writeFileSync(join(extDir, "pi-deck-ask-question.ts"), "// ask\n", "utf8");
+	writeFileSync(join(extDir, "pi-deck-todo.ts"), "// todo\n", "utf8");
+
+	try {
+		const paths = listActiveBuiltInExtensionPaths({ appPath: root, resourcesPath: root, isDev: true }, ["pi-deck-todo.ts"]);
+		assert.equal(paths.length, 1);
+		assert.ok(String(paths[0]).endsWith("pi-deck-ask-question.ts"));
+		// 内置扩展清单随版本增长：ask/goal/model-trace/nul-redirect/plan-mode/request-size-recovery/retry-no-body/security-gate/session-title/subagents/todo/trash-guard/vision
+		assert.equal(BUILT_IN_EXTENSIONS.length, 13);
+		assert.ok(BUILT_IN_EXTENSIONS.includes("pi-deck-goal-mode.ts"));
+		assert.ok(BUILT_IN_EXTENSIONS.includes("pi-deck-session-title.ts"));
+		assert.ok(BUILT_IN_EXTENSIONS.includes("pi-deck-trash-guard.ts"));
+		// 辅助模块**不得**进 -e 注入表（它们不是扩展入口，只是被 import 的模块）；
+		// 但它们必须仍在 extensions-manifest.json 里，否则热更新覆盖层会缺依赖。
+		assert.ok(!BUILT_IN_EXTENSIONS.includes("pi-deck-todo-state.ts"));
+	} finally {
+		rmSync(root, { recursive: true, force: true });
+	}
+});
+
+test("internal adapters are always injected even if user-facing built-ins are removed", () => {
+	const { listActiveBuiltInExtensionPaths, INTERNAL_BUILT_IN_EXTENSIONS } = loadBuiltInExtensionsModule();
+	const root = mkdtempSync(join(tmpdir(), "pideck-internal-ext-"));
+	const extDir = join(root, "resources", "extensions");
+	mkdirSync(extDir, { recursive: true });
+	writeFileSync(join(extDir, "pi-deck-shell-proxy.ts"), "// shell proxy\n", "utf8");
+	writeFileSync(join(extDir, "pi-deck-runtime.ts"), "// runtime control\n", "utf8");
+	try {
+		const paths = listActiveBuiltInExtensionPaths({ appPath: root, resourcesPath: root, isDev: true }, [...INTERNAL_BUILT_IN_EXTENSIONS]);
+		assert.equal(paths.length, 2);
+		const names = paths.map((path) => String(path).replace(/^.*[/\\]/, ""));
+		assert.ok(names.includes("pi-deck-shell-proxy.ts"));
+		assert.ok(names.includes("pi-deck-runtime.ts"));
+	} finally {
+		rmSync(root, { recursive: true, force: true });
+	}
+});
+
+test("built-in extension removal has a registered IPC handler", () => {
+	const storeIpc = readFileSync("src/main/ipc/storeIpc.ts", "utf8");
+	const extensionsTab = readFileSync("src/renderer/src/config/ExtensionsTab.tsx", "utf8");
+	assert.match(storeIpc, /ipcChannels\.extensionsRemoveBuiltIn[\s\S]*extensionManager\.removeBuiltIn\(source\)/);
+	assert.match(storeIpc, /ipcChannels\.extensionsRestoreBuiltIn[\s\S]*extensionManager\.restoreBuiltIn\(source\)/);
+	assert.doesNotMatch(extensionsTab, /extension\.enabled === false \? "disabled"/);
+	assert.doesNotMatch(extensionsTab, /t\("common\.enabled"\)|t\("common\.disabled"\)/);
+});
+
+test("AgentManager no longer deploys built-ins via ensurePiDeckExtension", () => {
+	const index = readFileSync("src/main/index.ts", "utf8");
+	const storeIpc = readFileSync("src/main/ipc/storeIpc.ts", "utf8");
+	const processSource = readFileSync("src/main/pi/PiProcess.ts", "utf8");
+	assert.doesNotMatch(index, /async function ensurePiDeckExtension/);
+	assert.doesNotMatch(storeIpc, /ensurePiDeckExtension/);
+	assert.match(index, /migrateLegacyBuiltInExtensions/);
+	assert.match(processSource, /appendBuiltInExtensionArgs/);
+	assert.match(processSource, /--extension/);
+});

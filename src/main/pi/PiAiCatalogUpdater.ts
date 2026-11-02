@@ -1,0 +1,580 @@
+/**
+ * pi-ai 模型目录更新器（设置页「模型目录」功能）。
+ *
+ * 打包态 resources 目录只读（Program Files 权限 / 签名校验），无法原地覆盖，
+ * 因此把 GitHub 拉取的新目录写入 userData 覆盖层（pi-ai-catalog.json + manifest），
+ * piAiBuiltinCatalog 读取时覆盖层优先、内置兜底。
+ *
+ * 安全底线：任何写入都「先校验后原子替换」（manifest sha256 + entryCount 校验通过，
+ * tmp 写入 + rename）；下载/校验/写入任意一环失败都不会破坏当前生效目录；
+ * 当前覆盖版在替换前备份为 .bak，支持「恢复上一个覆盖版」。
+ *
+ * 依赖注入：fetchImpl（默认 globalThis.fetch，单测注入替身）、userDataDir（构造函数传入）。
+ * 不依赖 electron，可被 node --test 直接加载。
+ */
+
+import { copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { PI_AI_CATALOG_FILE_NAME, PI_AI_CATALOG_MANIFEST_FILE_NAME, PI_AI_CATALOG_SCHEMA_VERSION, invalidatePiAiCatalogIndex, parsePiAiCatalogArtifact, resolveBuiltinPiAiCatalogArtifactPaths } from "./piAiBuiltinCatalog";
+import { compareSemver, generatePiAiCatalogFromFiles, type CatalogSourceFile } from "./piAiCatalogGenerate";
+import type { CatalogArtifactSourceStatus, CatalogCheckResult, CatalogUpdateResult, CatalogUpdateStatus } from "../../shared/types/catalog";
+import type { UpdateSourceId } from "../../shared/types/settings";
+// AtomGit 只有 OpenAPI contents 可取文件（`/<owner>/<repo>/raw/...` 已被 GitCode 前端接管，
+// 返回 SPA HTML），URL 构造与解码与内置扩展/内容、changelog 共用一套实现。
+import { atomGitContentsApiUrl, decodeAtomGitContentsResponse, gitHubRawFileUrl, type RepoFileSourceEntry } from "../update/atomGitContents";
+
+/** 默认回退分支：main（发行分支，模型目录与正式发行版对齐） */
+export const CATALOG_UPDATE_DEFAULT_BRANCH = "main";
+/** 允许的分支白名单（IPC 边界校验也使用同一常量，防路径/URL 注入） */
+export const CATALOG_UPDATE_ALLOWED_BRANCHES = ["main", "dev"] as const;
+
+/** 上游 npm 包名（与生成器/内置校验一致，来源即 @earendil-works/pi-ai）。 */
+export const CATALOG_SOURCE_PACKAGE = "@earendil-works/pi-ai";
+/** npm 版本解析源（中国镜像优先，官方兜底）：只取 latest 版本号。 */
+export const CATALOG_NPM_LATEST_URLS = ["https://registry.npmmirror.com/@earendil-works/pi-ai/latest", "https://registry.npmjs.org/@earendil-works/pi-ai/latest"] as const;
+/** jsDelivr 文件列表 API（枚举 dist/providers/data/*.json），取 flat 列表。 */
+export const CATALOG_JSDELIVR_FLAT_PREFIX = "https://data.jsdelivr.com/v1/package/npm/@earendil-works/pi-ai@";
+/** jsDelivr 单文件 CDN 前缀（按版本取 dist/providers/data/<file>）。 */
+export const CATALOG_JSDELIVR_FILE_PREFIX = "https://cdn.jsdelivr.net/npm/@earendil-works/pi-ai@";
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+	return value != null && typeof value === "object" && !Array.isArray(value);
+}
+
+function nonEmptyString(value: unknown): string | undefined {
+	return typeof value === "string" && value.length > 0 ? value : undefined;
+}
+
+/** 仓库文件源 id（atomgit OpenAPI / github raw）。 */
+type CatalogSourceId = RepoFileSourceEntry["id"];
+
+/**
+ * 下载源（按顺序尝试）：GitHub 源时 raw 直连优先，否则 AtomGit OpenAPI 优先。
+ *
+ * manifest 与 catalog 必须配对同源：跨源取会让 manifest 声明的 sha256/entryCount
+ * 与实际内容错配，写入前校验必失败。任一源失败只影响本次尝试，由 downloadFromAnySource
+ * 依次换下一个源，所以两种源配置下远端目录更新都可用。
+ */
+function sourceBaseUrls(branch: string, source: CatalogSourceId): { id: CatalogSourceId; catalog: string; manifest: string }[] {
+	const catalogFile = `resources/${PI_AI_CATALOG_FILE_NAME}`;
+	const manifestFile = `resources/${PI_AI_CATALOG_MANIFEST_FILE_NAME}`;
+	const build = (file: string, id: CatalogSourceId) => (id === "atomgit" ? atomGitContentsApiUrl(file, branch) : gitHubRawFileUrl(file, branch));
+	const order: CatalogSourceId[] = source === "github" ? ["github", "atomgit"] : ["atomgit", "github"];
+	return order.map((id) => ({ id, catalog: build(catalogFile, id), manifest: build(manifestFile, id) }));
+}
+
+/**
+ * 从 manifest 原始文本读取 source.packageVersion；解析失败返回 null。
+ * 版本号只做展示与比对，不做校验强依赖（强校验由 parsePiAiCatalogArtifact 承担）。
+ */
+function manifestPackageVersion(manifestRaw: string): string | null {
+	try {
+		const parsed: unknown = JSON.parse(manifestRaw);
+		if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+			const source = (parsed as Record<string, unknown>).source;
+			if (source && typeof source === "object" && !Array.isArray(source)) {
+				const version = (source as Record<string, unknown>).packageVersion;
+				if (typeof version === "string" && version.length > 0) return version;
+			}
+		}
+		return null;
+	} catch {
+		return null;
+	}
+}
+
+/**
+ * 从 manifest/catalog 原始文本读取 schemaVersion；非整数或解析失败返回 null。
+ * 解析不出来时不在这里判定，交由 parsePiAiCatalogArtifact 走原有 validation 分支。
+ */
+function artifactSchemaVersion(raw: string): number | null {
+	try {
+		const parsed: unknown = JSON.parse(raw);
+		if (isRecord(parsed) && typeof parsed.schemaVersion === "number" && Number.isInteger(parsed.schemaVersion)) return parsed.schemaVersion;
+		return null;
+	} catch {
+		return null;
+	}
+}
+
+/**
+ * 远端产物声明的 schemaVersion 与本地支持版本不一致时返回远端版本号，否则 null。
+ *
+ * 与 parsePiAiCatalogArtifact 的等值校验同口径：远端比本地新（读端还没放宽）或更旧
+ * 都算不兼容。单独成码是为了把「格式不兼容，请先升级 PiDeck」与「内容被篡改」区分开——
+ * 两者此前共用 validation，导致用户看到误导性的「仓库文件可能异常」（issue #343）。
+ */
+function incompatibleSchemaVersion(...raws: string[]): number | null {
+	for (const raw of raws) {
+		const version = artifactSchemaVersion(raw);
+		if (version !== null && version !== PI_AI_CATALOG_SCHEMA_VERSION) return version;
+	}
+	return null;
+}
+
+/** 目录来源摘要：校验通过才有值，否则 null（未生效）。直接传 catalog/manifest 文件路径。 */
+function sourceStatusFromFiles(catalogPath: string, manifestPath: string): CatalogArtifactSourceStatus | null {
+	try {
+		if (!existsSync(catalogPath) || !existsSync(manifestPath)) return null;
+		const catalogRaw = readFileSync(catalogPath, "utf8");
+		const manifestRaw = readFileSync(manifestPath, "utf8");
+		const entries = parsePiAiCatalogArtifact(catalogRaw, manifestRaw);
+		if (entries.length === 0) return null;
+		return { packageVersion: manifestPackageVersion(manifestRaw), entryCount: entries.length };
+	} catch {
+		return null;
+	}
+}
+
+function sourceStatusFromDir(dir: string): CatalogArtifactSourceStatus | null {
+	return sourceStatusFromFiles(join(dir, PI_AI_CATALOG_FILE_NAME), join(dir, PI_AI_CATALOG_MANIFEST_FILE_NAME));
+}
+
+/**
+ * 「没写入」时的附加语义：把「远端与当前一致」和「远端比当前旧」区分开。
+ *
+ * 发布分支的预生成件若没跟上 npm（目录同步滞后），分支源会一直返「不写入」，
+ * 而 npm 回退源又报「有更新」——两者叠在一起时用户看到的就是「说可更新 → 点更新 →
+ * 已是最新」。带上 skipped/远端与本地版本，UI 才能说清到底谁落后。
+ */
+function skippedResult(comparison: number, remoteVersion: string | null, localVersion: string | null): { skipped: "already-latest" | "remote-behind"; remoteVersion: string | null; localVersion: string | null } {
+	return { skipped: comparison < 0 ? "remote-behind" : "already-latest", remoteVersion, localVersion };
+}
+
+export type PiAiCatalogUpdaterOptions = {
+	userDataDir: string;
+	/** 网络实现注入（单测）；默认 globalThis.fetch */
+	fetchImpl?: typeof fetch;
+	/** 单次请求超时（ms），默认 15s */
+	timeoutMs?: number;
+	/** catalog 文件大小上限（防异常大响应），默认 16MB */
+	maxCatalogBytes?: number;
+	/** manifest 文件大小上限，默认 64KB */
+	maxManifestBytes?: number;
+	/** 默认分支，默认 main */
+	branch?: string;
+	/**
+	 * 更新源：复用应用更新的镜像偏好（shared/updateSources.ts）。
+	 * github → GitHub raw 直连优先；其余（atomgit 等）→ AtomGit OpenAPI 优先；
+	 * 两个源始终互为兜底，所以任何源配置下目录更新都可用。
+	 * 用函数而非快照：设置可在运行时更改，每次检查/下载读最新值。
+	 */
+	source?: () => UpdateSourceId;
+};
+
+export class PiAiCatalogUpdater {
+	private readonly userDataDir: string;
+	private readonly fetchImpl: typeof fetch;
+	private readonly timeoutMs: number;
+	private readonly maxCatalogBytes: number;
+	private readonly maxManifestBytes: number;
+	private readonly branch: string;
+	private readonly source: () => UpdateSourceId;
+
+	constructor(options: PiAiCatalogUpdaterOptions) {
+		this.userDataDir = options.userDataDir;
+		this.fetchImpl = options.fetchImpl ?? globalThis.fetch;
+		this.timeoutMs = options.timeoutMs ?? 15_000;
+		this.maxCatalogBytes = options.maxCatalogBytes ?? 16 * 1024 * 1024;
+		this.maxManifestBytes = options.maxManifestBytes ?? 64 * 1024;
+		this.branch = options.branch ?? CATALOG_UPDATE_DEFAULT_BRANCH;
+		this.source = options.source ?? (() => "github");
+	}
+
+	/**
+	 * 当前生效源归一化为仓库文件源 id：github 官方源走 raw 直连，其余（atomgit/自定义镜像）
+	 * 都走 AtomGit OpenAPI——两者都是匿名可读的公开源，任一失败会自动换另一个。
+	 */
+	private currentSource(): CatalogSourceId {
+		return this.source() === "github" ? "github" : "atomgit";
+	}
+
+	private catalogPath(): string {
+		return join(this.userDataDir, PI_AI_CATALOG_FILE_NAME);
+	}
+
+	/**
+	 * 当前生效目录文件路径（覆盖层校验通过优先，否则内置 resources），供「打开文件」查看内容。
+	 * 两层都不存在/无效时返回 null（此时内置也损坏，属异常态）。
+	 */
+	resolveEffectiveCatalogPath(): string | null {
+		const overlay = sourceStatusFromDir(this.userDataDir);
+		if (overlay) return this.catalogPath();
+		const builtinPaths = resolveBuiltinPiAiCatalogArtifactPaths();
+		if (builtinPaths && sourceStatusFromFiles(builtinPaths.catalogPath, builtinPaths.manifestPath)) {
+			return builtinPaths.catalogPath;
+		}
+		return null;
+	}
+
+	private manifestPath(): string {
+		return join(this.userDataDir, PI_AI_CATALOG_MANIFEST_FILE_NAME);
+	}
+
+	/** 设置页状态卡片：内置 + 覆盖层 + 备份标记。 */
+	getStatus(): CatalogUpdateStatus {
+		const builtinPaths = resolveBuiltinPiAiCatalogArtifactPaths();
+		return {
+			builtin: builtinPaths ? sourceStatusFromFiles(builtinPaths.catalogPath, builtinPaths.manifestPath) : null,
+			overlay: sourceStatusFromDir(this.userDataDir),
+			hasOverlayFiles: existsSync(this.catalogPath()) || existsSync(this.manifestPath()),
+			hasBackup: existsSync(`${this.catalogPath()}.bak`),
+		};
+	}
+
+	/**
+	 * 更新到最新：主源走仓库分支预生成件（直连或经 GitHub 镜像代理，单文件下载，
+	 * 国内比 npm 生成路径稳定），分支不可用或分支件不比本地新时再试 npm latest 生成。
+	 * 流程：分支下载 → 校验 → 版本防降级 → 备份当前覆盖 → 原子替换 → 失效索引缓存。
+	 * 返回 { ok: true, updated }：updated=false 表示没有可写入的更新（skipped 说明原因）。
+	 *
+	 * 「分支件不新」也要继续试 npm：checkRemote 在分支不可达时用 npm 回退给出「有更新」，
+	 * 两条路必须能互相兑现，否则设置页会常驻一条点了只回「已是最新」的提示。
+	 */
+	async update(branch?: string): Promise<CatalogUpdateResult> {
+		const branchResult = await this.updateFromBranch(branch ?? this.branch);
+		// 分支源已真正写入：其他源不可能再给出更新，直接返回。
+		if (branchResult.ok && branchResult.updated) return branchResult;
+		const npmResult = await this.tryUpdateFromNpmLatest();
+		// 分支源没写时两种情形：
+		// - 分支源结论可用（updated=false，远端不高于本地）：npm 真的写进去了才算更新，
+		//   否则分支结论更有诊断价值（能说清是仓库目录落后，而不是「已是最新」）；
+		// - 分支源失败：与历史行为一致，优先用 npm 结果，再按 code 归类失败。
+		if (branchResult.ok) return npmResult?.ok && npmResult.updated ? npmResult : branchResult;
+		if (npmResult) return npmResult;
+		// 两个源都失败时，分支源的校验/格式失败比 network 更有诊断价值：
+		// validation = 数据被篡改或损坏；incompatible = 远端格式高于当前版本，需先升级 PiDeck
+		// （UI 分别有 catalogFailValidation / catalogFailIncompatible 文案分支）。
+		if (branchResult.code === "validation" || branchResult.code === "incompatible") return branchResult;
+		return {
+			ok: false,
+			code: "network",
+			message: "catalog update failed from all sources (branch + npm)",
+		};
+	}
+
+	/**
+	 * 回退源：从 npm latest 生成并写入覆盖层（分支源全挂时的最后手段）。
+	 * 返回 null 表示 npm 路径失败（网络/生成校验不过）。
+	 */
+	private async tryUpdateFromNpmLatest(): Promise<CatalogUpdateResult | null> {
+		try {
+			const version = await this.resolveNpmLatestVersion();
+			if (!version) return null;
+			const current = this.getEffectiveVersion();
+			// 防降级：npm latest 不高于当前生效版本时，不覆盖（远端分支可能更旧）。
+			if (current) {
+				const comparison = compareSemver(version, current);
+				if (comparison <= 0) {
+					return { ok: true, updated: false, ...skippedResult(comparison, version, current) };
+				}
+			}
+			const files = await this.fetchNpmCatalogDataFiles(version);
+			if (files.length === 0) return null;
+			const generated = generatePiAiCatalogFromFiles(files, version);
+			const entries = parsePiAiCatalogArtifact(generated.catalogText, generated.manifestText);
+			// 生成结果本身需通过内置校验（哈希/结构），防止上游数据异常上盘。
+			if (entries.length === 0) return null;
+			this.writeOverlayAtomically(generated.catalogText, generated.manifestText);
+			invalidatePiAiCatalogIndex();
+			return { ok: true, updated: true };
+		} catch {
+			return null;
+		}
+	}
+
+	/** 回退源：从仓库分支拉取预生成件（双源下载 → 校验 → 版本防降级 → 写入）。 */
+	private async updateFromBranch(branch: string): Promise<CatalogUpdateResult> {
+		const source = this.currentSource();
+		let pair: { catalogRaw: string; manifestRaw: string };
+		try {
+			pair = await this.downloadFromAnySource(branch, source);
+		} catch (error) {
+			return {
+				ok: false,
+				code: "network",
+				message: `catalog download failed from all sources: ${error instanceof Error ? error.message : String(error)}`,
+			};
+		}
+		// 先分辨「格式不兼容」与「内容被篡改」：两者都会让 parse 返回空，但用户该做的事完全不同。
+		const incompatible = incompatibleSchemaVersion(pair.manifestRaw, pair.catalogRaw);
+		if (incompatible !== null) {
+			return {
+				ok: false,
+				code: "incompatible",
+				message: `remote catalog schemaVersion ${incompatible} is not supported (expected ${PI_AI_CATALOG_SCHEMA_VERSION})`,
+			};
+		}
+		const entries = parsePiAiCatalogArtifact(pair.catalogRaw, pair.manifestRaw);
+		if (entries.length === 0) {
+			// 下载内容与 manifest 不匹配（或被篡改）：拒绝写入，防止坏数据上盘
+			return { ok: false, code: "validation", message: "downloaded artifact failed manifest validation" };
+		}
+		return this.writeWithVersionGuard(pair.catalogRaw, pair.manifestRaw, manifestPackageVersion(pair.manifestRaw));
+	}
+
+	/**
+	 * 版本防降级写入：新版本不高于当前生效版本（覆盖层优先，否则内置）时跳过写入，
+	 * 返回 { ok: true, updated: false }（已是最新，不覆盖）。
+	 * 写入失败返回 write 码，成功返回 { ok: true, updated: true }。
+	 */
+	private writeWithVersionGuard(catalogRaw: string, manifestRaw: string, newVersion: string | null): CatalogUpdateResult {
+		const current = this.getEffectiveVersion();
+		if (current && newVersion) {
+			const comparison = compareSemver(newVersion, current);
+			if (comparison <= 0) {
+				return { ok: true, updated: false, ...skippedResult(comparison, newVersion, current) };
+			}
+		}
+		try {
+			this.writeOverlayAtomically(catalogRaw, manifestRaw);
+		} catch (error) {
+			return {
+				ok: false,
+				code: "write",
+				message: `failed to write overlay: ${error instanceof Error ? error.message : String(error)}`,
+			};
+		}
+		invalidatePiAiCatalogIndex();
+		return { ok: true, updated: true };
+	}
+
+	/** 当前生效目录版本（覆盖层优先，否则内置）；无有效目录为 null。 */
+	private getEffectiveVersion(): string | null {
+		const status = this.getStatus();
+		return status.overlay?.packageVersion ?? status.builtin?.packageVersion ?? null;
+	}
+
+	/** 解析 npm 包 latest 版本号；所有源失败返回 null（不抛，交由调用方回退）。 */
+	private async resolveNpmLatestVersion(): Promise<string | null> {
+		for (const url of CATALOG_NPM_LATEST_URLS) {
+			try {
+				const text = await this.downloadText(url, this.maxManifestBytes);
+				const parsed: unknown = JSON.parse(text);
+				if (isRecord(parsed)) {
+					const version = nonEmptyString(parsed.version);
+					if (version) return version;
+				}
+			} catch {
+				// 换下一个镜像源
+			}
+		}
+		return null;
+	}
+
+	/**
+	 * 从 npm 包枚举并拉取 dist/providers/data/*.json（只取需要的模型规格数据，
+	 * 不下载整个 4MB 包）。用 jsDelivr flat 列表枚举文件名，再并行拉各文件。
+	 */
+	private async fetchNpmCatalogDataFiles(version: string): Promise<CatalogSourceFile[]> {
+		const flatUrl = `${CATALOG_JSDELIVR_FLAT_PREFIX}${version}/flat`;
+		const flatText = await this.downloadText(flatUrl, this.maxCatalogBytes);
+		const flat: unknown = JSON.parse(flatText);
+		const files = isRecord(flat) && Array.isArray(flat.files) ? flat.files : [];
+		const names = files.map((entry) => (isRecord(entry) && typeof entry.name === "string" ? entry.name.replace(/^\//, "") : "")).filter((name) => name.startsWith("dist/providers/data/") && name.endsWith(".json") && !name.endsWith(".manifest.json"));
+		if (names.length === 0) return [];
+		return Promise.all(
+			names.map(async (name) => {
+				const content = await this.downloadText(`${CATALOG_JSDELIVR_FILE_PREFIX}${version}/${name}`, this.maxCatalogBytes);
+				return { name: name.slice("dist/providers/data/".length), content };
+			}),
+		);
+	}
+
+	/** 一键还原：当前覆盖版转存为 .bak 并删除覆盖文件，回退到内置目录。 */
+	restoreBuiltin(): CatalogUpdateResult {
+		if (!existsSync(this.catalogPath()) && !existsSync(this.manifestPath())) {
+			// 没有覆盖层：无需操作，视为成功（UI 状态卡片会显示内置生效）
+			return { ok: true, updated: false };
+		}
+		try {
+			this.moveOverlayToBackup();
+			invalidatePiAiCatalogIndex();
+			return { ok: true, updated: true };
+		} catch (error) {
+			return {
+				ok: false,
+				code: "write",
+				message: `failed to restore builtin catalog: ${error instanceof Error ? error.message : String(error)}`,
+			};
+		}
+	}
+
+	/** 恢复上一个覆盖版：.bak 校验通过后写回覆盖层。 */
+	restorePrevious(): CatalogUpdateResult {
+		const bakCatalog = `${this.catalogPath()}.bak`;
+		const bakManifest = `${this.manifestPath()}.bak`;
+		if (!existsSync(bakCatalog) || !existsSync(bakManifest)) {
+			return { ok: false, code: "no-backup", message: "no previous overlay backup found" };
+		}
+		try {
+			const catalogRaw = readFileSync(bakCatalog, "utf8");
+			const manifestRaw = readFileSync(bakManifest, "utf8");
+			if (parsePiAiCatalogArtifact(catalogRaw, manifestRaw).length === 0) {
+				return { ok: false, code: "validation", message: "backup artifact failed manifest validation" };
+			}
+			this.writeOverlayAtomically(catalogRaw, manifestRaw);
+			invalidatePiAiCatalogIndex();
+			return { ok: true, updated: true };
+		} catch (error) {
+			return {
+				ok: false,
+				code: "write",
+				message: `failed to restore previous overlay: ${error instanceof Error ? error.message : String(error)}`,
+			};
+		}
+	}
+
+	/**
+	 * 检查是否有新版本：主源读仓库分支 manifest（直连或经 GitHub 镜像代理），
+	 * 与下载同源，避免「检测说有更新、下载却拿不到」的版本错位；
+	 * 分支全不可达时回退到 npm latest。
+	 */
+	async checkRemote(branch?: string): Promise<CatalogCheckResult> {
+		const branchResult = await this.checkRemoteFromBranch(branch ?? this.branch);
+		if (branchResult.ok) return { ...branchResult, source: "branch" };
+		const npmVersion = await this.resolveNpmLatestVersion();
+		if (npmVersion) {
+			const localVersion = this.getEffectiveVersion();
+			const hasUpdate = localVersion ? compareSemver(npmVersion, localVersion) > 0 : true;
+			// 回退源的版本与分支预生成件可能不同（仓库目录同步滞后时 npm 更新）：
+			// 标出 source，update 侧会按同一条源兑现，避免「说可更新又答已是最新」。
+			return { ok: true, remoteVersion: npmVersion, localVersion, hasUpdate, source: "npm" };
+		}
+		return branchResult;
+	}
+
+	/** 回退：从仓库分支 manifest 解析版本并做语义比较。 */
+	private async checkRemoteFromBranch(branch: string): Promise<CatalogCheckResult> {
+		const source = this.currentSource();
+		let manifestRaw: string;
+		try {
+			manifestRaw = await this.downloadManifestFromAnySource(branch, source);
+		} catch (error) {
+			return {
+				ok: false,
+				code: "network",
+				message: `catalog manifest download failed from all sources: ${error instanceof Error ? error.message : String(error)}`,
+			};
+		}
+		// 远端 manifest 的 schemaVersion 与本地支持版本不一致时，本次检查给不出可用结论
+		// （更新必然失败），单独归码；调用方会继续尝试 npm 回退源——那条路径在本机现场生成，
+		// 天然与当前版本兼容，所以格式不兼容时仍可能自愈。
+		const incompatible = incompatibleSchemaVersion(manifestRaw);
+		if (incompatible !== null) {
+			return {
+				ok: false,
+				code: "incompatible",
+				message: `remote manifest schemaVersion ${incompatible} is not supported (expected ${PI_AI_CATALOG_SCHEMA_VERSION})`,
+			};
+		}
+		const remoteVersion = manifestPackageVersion(manifestRaw);
+		if (remoteVersion === null) {
+			return { ok: false, code: "validation", message: "remote manifest has no valid packageVersion" };
+		}
+		const status = this.getStatus();
+		const localVersion = status.overlay?.packageVersion ?? status.builtin?.packageVersion ?? null;
+		const hasUpdate = localVersion ? compareSemver(remoteVersion, localVersion) > 0 : true;
+		return { ok: true, remoteVersion, localVersion, hasUpdate };
+	}
+
+	/**
+	 * 单源取文本：AtomGit OpenAPI 回的是 base64 信封，必须先解码（形态异常会抛错 →
+	 * 外层 try/catch 换下一个源）；GitHub raw 响应体即原文。
+	 */
+	private async downloadRepoFile(id: CatalogSourceId, url: string, maxBytes: number): Promise<string> {
+		const body = await this.downloadText(url, maxBytes);
+		return id === "atomgit" ? decodeAtomGitContentsResponse(body) : body;
+	}
+
+	/**
+	 * 下载一对 artifact（先 manifest 后 catalog），按源列表顺序尝试：
+	 * 源内任一文件失败（网络/超时/HTTP 错误/超大小/形态不识别）即换下一个源。
+	 * 全部失败抛错，由调用方归为 network。
+	 */
+	private async downloadFromAnySource(branch: string, source: CatalogSourceId): Promise<{ catalogRaw: string; manifestRaw: string }> {
+		let lastError: unknown;
+		for (const pair of sourceBaseUrls(branch, source)) {
+			try {
+				const manifestRaw = await this.downloadRepoFile(pair.id, pair.manifest, this.maxManifestBytes);
+				const catalogRaw = await this.downloadRepoFile(pair.id, pair.catalog, this.maxCatalogBytes);
+				return { catalogRaw, manifestRaw };
+			} catch (error) {
+				lastError = error;
+			}
+		}
+		throw lastError ?? new Error("no download sources configured");
+	}
+
+	/** 只下载 manifest（checkRemote 用），源列表同 update，全部失败抛错。 */
+	private async downloadManifestFromAnySource(branch: string, source: CatalogSourceId): Promise<string> {
+		let lastError: unknown;
+		for (const pair of sourceBaseUrls(branch, source)) {
+			try {
+				return await this.downloadRepoFile(pair.id, pair.manifest, this.maxManifestBytes);
+			} catch (error) {
+				lastError = error;
+			}
+		}
+		throw lastError ?? new Error("no download sources configured");
+	}
+
+	private async downloadText(url: string, maxBytes: number): Promise<string> {
+		const controller = new AbortController();
+		// 超时中止：网络挂起（DNS/连接阶段）时同样生效，防止 UI 长期转圈
+		const timer = setTimeout(() => controller.abort(), this.timeoutMs);
+		try {
+			const response = await this.fetchImpl(url, {
+				signal: controller.signal,
+				redirect: "follow",
+				headers: { "user-agent": "PiDeck-catalog-updater" },
+			});
+			if (!response.ok) throw new Error(`HTTP ${response.status} for ${url}`);
+			const buffer = await response.arrayBuffer();
+			if (buffer.byteLength > maxBytes) {
+				throw new Error(`response too large (${buffer.byteLength} bytes) for ${url}`);
+			}
+			return new TextDecoder("utf-8").decode(buffer);
+		} finally {
+			clearTimeout(timer);
+		}
+	}
+
+	/**
+	 * 原子替换覆盖层文件：tmp 写入 → 校验无误 → 当前覆盖版复制为 .bak → rename 顶上。
+	 * 任一步失败只清理 tmp，当前生效文件与 .bak 不会被破坏。
+	 */
+	private writeOverlayAtomically(catalogRaw: string, manifestRaw: string): void {
+		mkdirSync(this.userDataDir, { recursive: true });
+		const catalogPath = this.catalogPath();
+		const manifestPath = this.manifestPath();
+		const tmpCatalog = `${catalogPath}.tmp`;
+		const tmpManifest = `${manifestPath}.tmp`;
+		try {
+			writeFileSync(tmpCatalog, catalogRaw, "utf8");
+			writeFileSync(tmpManifest, manifestRaw, "utf8");
+			// 备份当前覆盖版（无论新旧都保留一份，供「恢复上一个覆盖版」）
+			if (existsSync(catalogPath)) copyFileSync(catalogPath, `${catalogPath}.bak`);
+			if (existsSync(manifestPath)) copyFileSync(manifestPath, `${manifestPath}.bak`);
+			renameSync(tmpCatalog, catalogPath);
+			renameSync(tmpManifest, manifestPath);
+		} catch (error) {
+			// 清理半成品；失败重抛给调用方归类 write，备份文件保留供人工恢复
+			try {
+				rmSync(tmpCatalog, { force: true });
+				rmSync(tmpManifest, { force: true });
+			} catch {
+				/* 清理失败不掩盖原始错误 */
+			}
+			throw error;
+		}
+	}
+
+	/** 覆盖文件转 .bak（覆盖旧 .bak）；暴露给 restoreBuiltin。 */
+	private moveOverlayToBackup(): void {
+		const catalogPath = this.catalogPath();
+		const manifestPath = this.manifestPath();
+		if (existsSync(catalogPath)) renameSync(catalogPath, `${catalogPath}.bak`);
+		if (existsSync(manifestPath)) renameSync(manifestPath, `${manifestPath}.bak`);
+	}
+}

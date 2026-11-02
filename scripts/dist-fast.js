@@ -1,0 +1,47 @@
+/**
+ * dist:fast —— 快速验证打包（日常迭代用）。
+ *
+ * 用法：
+ *   npm run dist:fast                 → 默认仅 nsis 安装包
+ *   npm run dist:fast -- portable      → 仅便携 exe
+ *   npm run dist:fast -- zip           → 仅 zip
+ *   npm run dist:fast -- nsis zip      → 多个指定格式
+ *
+ * 与 dist:win 的区别（即提速来源）：
+ * 1. 跳过 tsc 全量类型检查 —— 类型正确性交给 IDE / npm run verify 兜底；
+ * 2. compression=store —— electron-builder 不做 zlib 最高档压缩（maximum 是发布档）；
+ * 3. 默认只打单个目标 —— 跳过其余格式的重复压缩（可用参数按需指定）；
+ * 4. PI_FAST_PACK=1 —— 跳过 afterPack 的 asar 解包清理/重打包（打包耗时大头）。
+ *
+ * 注意：发布正式版前必须跑完整 dist:win（maximum + 三格式 + 完整 afterPack 清理），
+ * 且合并前照常执行 npm run typecheck，不要用本产物对外发布。
+ */
+const { execSync } = require("node:child_process");
+const path = require("node:path");
+const { electronBuilderEnv } = require("./electronBuilderEnv.js");
+
+const root = path.resolve(__dirname, "..");
+
+// npm run 会把 -- 后面的参数放到 process.argv 的 2..n（与 dist-win.js 一致）
+const args = process.argv.slice(2);
+const formats = args.length > 0 ? args.join(" ") : "nsis";
+
+console.log(`[1/4] 构建本地 packages（file: 依赖需要 lib/ 产物）…`);
+execSync("npm run build:packages", { cwd: root, stdio: "inherit", shell: true });
+
+// --if-missing 跳过重打 tgz，但仍会清 extraResources，避免本地 --full 残留被打进包。
+// 前置同步声明版本根字段（devDependencies 会被 electron-builder 从 asar 剥掉，
+
+// build:fast 同步生成 pi-ai catalog，避免快速包带上升级前的静态模型目录。
+console.log(`\n[3/4] 生成 catalog + electron-vite build（跳过 tsc 全量类型检查）…`);
+execSync("npm run build:fast", { cwd: root, stdio: "inherit", shell: true });
+
+console.log(`\n[4/4] electron-builder --win ${formats}（compression=store + 跳过 asar 重打包）…`);
+execSync(`npx electron-builder --win ${formats} --config.compression=store`, {
+	cwd: root,
+	stdio: "inherit",
+	shell: true,
+	env: electronBuilderEnv({ ...process.env, PI_FAST_PACK: "1" }),
+});
+
+console.log(`\n✅ 快速打包完成！产物在 release/ 目录。`);

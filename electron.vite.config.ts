@@ -1,0 +1,209 @@
+import { defineConfig, externalizeDepsPlugin } from "electron-vite";
+import react from "@vitejs/plugin-react";
+import tailwindcss from "@tailwindcss/vite";
+import { resolve } from "node:path";
+import type { Plugin } from "vite";
+import { readDevGitBranch, resolveDevVitePort } from "./src/main/devIsolation";
+import { readFile } from "node:fs/promises";
+import { transformWithEsbuild } from "vite";
+import { hostPluginPreloadPlugin } from "./scripts/hostPluginPreload";
+
+/**
+ * AudioWorklet 语音分段器内联插件。
+ *
+ * `src/renderer/src/utils/voicePcmSegmenter.ts` 是有单测覆盖的 TS 模块，但 AudioWorklet
+ * 作用域没有模块解析器，不能 import；同时 Vite 也没有 AudioWorklet 入口类型。
+ * 因此用 `?raw` 把源码当字符串内联，但这个插件必须把 TS 编译成 JS —— 否则 worklet
+ * 拿到的是带 type/interface 的 TS 源码，`addModule` 会 SyntaxError（只有真人点麦克风才暴露）。
+ *
+ * 只处理这一个明确路径：其它 `?raw` 导入（纯文本资源）不需要也不应该被转译。
+ */
+function audioWorkletSegmenterPlugin(): Plugin {
+	// 必须用路径后缀匹配：Vite 传进来的 id 是绝对路径，`startsWith` 相对路径在真实构建里恒为 false，
+	// 会被 Vite 内置的 ?raw 处理器抢先返回 TS 源码（addModule 直接 SyntaxError）。
+	const SEGMENTER_SUFFIX = "voicePcmSegmenter.ts?raw";
+
+	return {
+		name: "pideck-audio-worklet-segmenter",
+		// 必须早于 Vite 内置 asset/raw 插件，否则拿不到这个 id。
+		enforce: "pre",
+		async transform(_code, id) {
+			if (!id.replace(/\\/g, "/").endsWith(SEGMENTER_SUFFIX)) return;
+			const source = await readFile(id.replace(/\?.*$/, ""), "utf8");
+			const transpiled = await transformWithEsbuild(source, `${SEGMENTER_SUFFIX}.js`, { loader: "ts", target: "es2022", format: "esm" });
+			return { code: `export default ${JSON.stringify(transpiled.code)};`, map: null };
+		},
+	};
+}
+
+/**
+ * 把裸导入 `shiki` 指到精细 bundle。
+ * worker 不继承 renderer.resolve.alias，必须 renderer plugins + worker.plugins 都挂。
+ * find 必须是 `/^shiki$/`：字符串前缀会把 `shiki/core` / `shiki/wasm` 一并改写。
+ */
+function shikiBundleAliasPlugin(): Plugin {
+	return {
+		name: "shiki-bundle-alias",
+		enforce: "pre",
+		config() {
+			return {
+				resolve: {
+					alias: [
+						{
+							find: /^shiki$/,
+							replacement: resolve("src/renderer/src/shiki/bundle.ts"),
+						},
+					],
+				},
+			};
+		},
+	};
+}
+
+/**
+ * KaTeX 字体精简 Vite 插件
+ *
+ * katex.min.css 中的每个 @font-face 声明了三种格式（woff2 / woff / truetype），
+ * Electron 的 Chromium 只需 woff2（最高压缩比）。本插件在构建时移除 woff 和 truetype
+ * 的 src 引用，使 Vite 不再将 .ttf 和 .woff 文件复制到产物目录。
+ *
+ * 效果：59 个字体文件 → 19 个 woff2 文件，节省 ~1.2MB。
+ */
+function katexWoff2OnlyPlugin(): Plugin {
+	const KATEX_CSS = /katex[\\\/]dist[\\\/]katex\.min\.css/;
+	// 匹配 @font-face 块，提取 src 属性中仅保留 woff2 的 url
+	const FONT_FACE_RE =
+		/@font-face\s*\{([^}]*?src\s*:\s*)([^}]*?)\};?/gi;
+
+	return {
+		name: "katex-woff2-only",
+		enforce: "pre",
+		transform(code, id) {
+			if (!KATEX_CSS.test(id)) return;
+
+			const replaced = code.replace(FONT_FACE_RE, (_match, prefix, srcValue) => {
+				// 从 src 中提取 woff2 的 url() 部分
+				const woff2Match = srcValue.match(/url\([^)]+\)\s*format\(['"]?woff2['"]?\)/i);
+				if (!woff2Match) {
+					// 没有 woff2 格式（理论上不存在）→ 仅保留 url() 引用，去掉 format 声明
+					const firstUrl = srcValue.match(/url\([^)]+\)/i);
+					if (firstUrl) return `@font-face{${prefix}${firstUrl[0]};}`;
+					return _match;
+				}
+				// 只保留 woff2 这一行，去掉后续的逗号和其它格式
+				return `@font-face{${prefix}${woff2Match[0]};}`;
+			});
+
+			return { code: replaced, map: null };
+		},
+	};
+}
+
+export default defineConfig({
+  main: {
+    plugins: [externalizeDepsPlugin()],
+    build: {
+      lib: {
+        // electron-vite 多入口：lib.entry 对象形式输出到 out/main。
+        entry: {
+          index: resolve(__dirname, "src/main/index.ts"),
+        },
+        formats: ["cjs"],
+      },
+    },
+    define: {
+      // 构建标记：npm run dist:win:dev 打包时注入 true，用于隔离 dev 构建的配置目录与 AppUserModelID。
+      __PIDECK_DEV_BUILD__: JSON.stringify(process.env.PIDECK_DEV_BUILD === "1"),
+    },
+  },
+  preload: {
+    plugins: [externalizeDepsPlugin(), hostPluginPreloadPlugin()],
+  },
+  renderer: {
+    // Windows 上 localhost 可能优先解析到 IPv6 ::1，Electron 加载 dev server 时会超时；固定 IPv4 保证本机访问稳定。
+    server: {
+      host: "127.0.0.1",
+      // 5173 落在部分 Windows/Hyper-V 动态端口排除范围内时会 EACCES；使用相邻的未保留端口保证 dev server 可监听。
+      // 功能分支按 git 分支散列端口，避免多个 worktree 同时 npm run dev 抢 5181。
+      // 未开 strictPort：散列碰撞时 Vite 自动让位，ELECTRON_RENDERER_URL 仍指向实际地址。
+      port: resolveDevVitePort(readDevGitBranch()),
+    },
+    // dev 预构建：web 端独享的 ai-sdk 依赖树必须启动即优化。
+    // 否则首次访问 web 服务端口时 vite 才在运行中重新优化，页面已引用的
+    // deps URL 会 504/失效，经 WebServiceManager 代理回退 HTML 后浏览器报
+    // "MIME text/html" 模块错误、整页白屏。
+    optimizeDeps: {
+      include: [
+        "@ai-sdk/react",
+        "ai",
+        "@ai-sdk/provider",
+        "@ai-sdk/provider-utils",
+        "@ai-sdk/mcp",
+        "@ai-sdk/gateway",
+        "swr",
+        "throttleit",
+        "json-schema",
+        "eventsource-parser",
+        "undici",
+        "pkce-challenge",
+        "dequal",
+        "use-sync-external-store",
+        "@standard-schema/spec",
+        "@workflow/serde",
+      ],
+    },
+    resolve: {
+      alias: [
+        { find: "@", replacement: resolve("src/renderer/src") },
+        { find: "@renderer", replacement: resolve("src/renderer/src") },
+        { find: "@shared", replacement: resolve("src/shared") },
+        // 必须精确匹配裸 `shiki`：字符串前缀会把 `shiki/core` / `shiki/wasm` 一并改写，
+        // @pierre/diffs 的 worker 与引擎入口会解析到不存在的 bundle.ts/core。
+        { find: /^shiki$/, replacement: resolve("src/renderer/src/shiki/bundle.ts") },
+      ],
+    },
+    plugins: [audioWorkletSegmenterPlugin(), react(), tailwindcss(), katexWoff2OnlyPlugin(), shikiBundleAliasPlugin()],
+    worker: {
+      // @pierre/diffs 的 worker 线程脚本是 ESM（含 import），
+      // 必须用 ES 格式打包（iife 不支持 code-splitting），产物以 module worker 加载
+      format: "es",
+      plugins: () => [shikiBundleAliasPlugin()],
+    },
+    build: {
+      // 不计算 gzip 压缩后大小（节约构建时间）
+      reportCompressedSize: false,
+      // CSS 压缩使用 esbuild（比 cssnano 快）
+      cssMinify: "esbuild",
+      rollupOptions: {
+        // 缓存模块解析结果，增量构建时跳过未变更模块，加速二次打包
+        cache: true,
+        // 多入口：主窗口 index.html + 桌面宠物悬浮窗 pet.html + Web 服务聊天页 web.html
+        input: {
+          index: resolve("src/renderer/index.html"),
+          pet: resolve("src/renderer/pet.html"),
+          web: resolve("src/renderer/web.html"),
+          floater: resolve("src/renderer/floater.html"),
+          // 系统级划词浮窗：独立小窗口（全局快捷键触发），不加载主工作台
+          "selection-tool": resolve("src/renderer/selection-tool.html"),
+        },
+        output: {
+          // 将大体积的第三方依赖拆分为独立 chunk，减少首屏需要加载和解析的 JS 体积。
+          // 拆分策略：React 全家桶、图标库、Markdown 渲染栈各归一类。
+          // 利用 Rollup 的 chunk 缓存机制：vendor 不变时浏览器复用缓存，加快二次加载。
+          // Mermaid 已在渲染层用 dynamic import 惰性加载，此处不额外聚合，避免破坏已有 code splitting。
+          manualChunks(id) {
+            if (id.includes("/node_modules/react/") || id.includes("/node_modules/react-dom/") || id.includes("/node_modules/scheduler/")) {
+              return "vendor-react";
+            }
+            if (id.includes("/node_modules/lucide-react/")) {
+              return "vendor-icons";
+            }
+            if (id.includes("/node_modules/react-markdown/") || id.includes("/node_modules/remark-") || id.includes("/node_modules/rehype-") || id.includes("/node_modules/unified/") || id.includes("/node_modules/katex/") || id.includes("/node_modules/mdast-") || id.includes("/node_modules/hast-") || id.includes("/node_modules/micromark-") || id.includes("/node_modules/vfile") || id.includes("/node_modules/unist-") || id.includes("/node_modules/trough") || id.includes("/node_modules/bail") || id.includes("/node_modules/dequal") || id.includes("/node_modules/devlop") || id.includes("/node_modules/html-to-image/")) {
+              return "vendor-markdown";
+            }
+          },
+        },
+      },
+    },
+  },
+});

@@ -1,0 +1,194 @@
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { createRequire } from "node:module";
+import path from "node:path";
+import test from "node:test";
+import ts from "typescript";
+import vm from "node:vm";
+import { loadTsCommonJs } from "./helpers/loadTsCommonJs.mjs";
+
+const require = createRequire(import.meta.url);
+
+function loadConfigManager() {
+	let content;
+	const writes = [];
+	const source = readFileSync("src/main/config/ConfigManager.ts", "utf8");
+	const { outputText } = ts.transpileModule(source, {
+		compilerOptions: {
+			module: ts.ModuleKind.CommonJS,
+			target: ts.ScriptTarget.ES2022,
+		},
+	});
+	const sandbox = {
+		AbortController,
+		clearTimeout,
+		exports: {},
+		process: { ...process, platform: "win32" },
+		setTimeout,
+		require: (id) => {
+			if (id === "node:fs/promises") {
+				return {
+					mkdir: async () => {},
+					readFile: async () => {
+						if (content == null) throw new Error("ENOENT");
+						return content;
+					},
+					writeFile: async (filePath, nextContent) => {
+						content = nextContent;
+						writes.push({ filePath, content: nextContent });
+					},
+				};
+			}
+			if (id === "node:path") return path.win32;
+			if (id === "node:os") return { homedir: () => "C:\\Users\\tester" };
+			if (id === "electron") return { net: {} };
+			if (id === "./baseUrlPath") {
+				return {
+					ensureOpenAiVersionPath: (value) => value,
+					needsSessionBaseUrlVersionHint: () => false,
+					suggestNormalizedBaseUrl: () => null,
+				};
+			}
+			if (id === "../../shared/i18n/mainProcessCopy") return { mainProcessT: () => "" };
+			if (id === "./parseProviderModels") return { parseProviderModelsResponse: () => [] };
+			if (id === "./providerMigration") {
+				return { isSafeProviderName: () => true };
+			}
+			// 配置写盘留痕（ConfigManager.writeJsonFile 调 getAppLogger()?.info）；trust 测试不关心日志，未安装 logger 时返回 undefined。
+			if (id === "../logging/sharedLogger") {
+				return { getAppLogger: () => undefined };
+			}
+			if (id === "./tokendanceAttribution") {
+				// saveModelsConfig 会调用归因兜底（仅依赖纯常量，无副作用），加载真实实现避免原生 require 找不到 .ts
+				return loadTsCommonJs("src/main/config/tokendanceAttribution.ts");
+			}
+			// 用量探针传输层抽取（6d9e2294）后新增的依赖；trust 测试不调用用量探测，空实现即可
+			if (id === "./usageProbeTransport") {
+				return {
+					usageProbeRequest: async () => {
+						throw new Error("stub");
+					},
+				};
+			}
+			// pisageEndpoint 读 profile 快照；trust 测试只信 trust.json，Pi 用量分支不触达
+			if (id === "../pi/pirofileSettings") {
+				return { readPiettingsSnapshot: () => undefined };
+			}
+			if (id === "./userUsageProbes") {
+				return {
+					loadUserUsageProbes: async () => [],
+					loadUsageProbeSettings: async () => ({ errors: [] }),
+				};
+			}
+			if (id === "./providerUsageResolver") {
+				return { resolveProviderUsageEndpoint: async () => ({ provider: "", matched: false }) };
+			}
+			if (id === "./usageProbeTemplates") {
+				return {
+					buildDeclarativeUsageProbeTemplate: () => ({ error: "stub" }),
+					USAGE_PROBE_CATEGORY_BY_TEMPLATE_ID: {},
+				};
+			}
+			if (id === "../pi/piAiBuiltinCatalog") {
+				return { getPiAiCatalogIndex: () => ({}) };
+			}
+			if (id === "./mcpConfig") {
+				return {
+					loadMcpConfigSnapshot: () => null,
+					mcpDocsUrl: "",
+					probeMcpServer: async () => ({ ok: false }),
+					validateMcpConfigFile: () => undefined,
+				};
+			}
+			if (id === "./providerUsageProbe") {
+				return {
+					candidateApplies: () => false,
+					parseUsageResponseBody: () => null,
+					USAGE_PROBE_CANDIDATES: [],
+					usageProbeUrls: () => [],
+				};
+			}
+			if (id === "../../shared/piredentialRef") {
+				return { credentialRefFor: () => "STUB_API_KEY" };
+			}
+			if (id === "../pi/pideckPiome") {
+				return { pideckUsageProbesDir: (value) => value };
+			}
+			// ConfigManager 依赖 ../../shared/piroviderNames 的 normalizePieepseekProvider；.ts 经 node 类型剥离可 require。
+			if (id === "../../shared/piroviderNames") {
+				return require("../src/shared/piroviderNames.ts");
+			}
+			// ConfigManager 依赖 ./pisageEndpoint；其依赖（piredentialRef/piroviderNames/providerMigration）均已被上面 stub。
+			if (id === "./pisageEndpoint") {
+				const src = readFileSync("src/main/config/pisageEndpoint.ts", "utf8");
+				const out = ts.transpileModule(src, {
+					compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+				}).outputText;
+				const m = { exports: {} };
+				vm.runInNewContext(
+					out,
+					{
+						...sandbox,
+						module: m,
+						exports: m.exports,
+						require: sandbox.require,
+					},
+					{ filename: "pisageEndpoint.ts" },
+				);
+				return m.exports;
+			}
+			// providerUsageCustom（余额面板解析）在 trust 测试里不被调用，空实现即可。
+			// 它的 providerUsagePath/providerUsageBooster 是无扩展名相对导入，落到下面的兜底 require
+			// 会被 Node 的 ESM 解析判 ERR_MODULE_NOT_FOUND，必须在映射表里截断。
+			if (id === "./providerUsageCustom") {
+				return { parseSub2ApiPanelBalance: () => undefined };
+			}
+			// 面板登录态续期（sub2apiPanelSession）：ConfigManager 只用它拼余额请求，trust 测试不触达。
+			// 真实模块值导入 providerUsageCustom，走兜底 require 会重复踩上面的 ESM 扩展名问题。
+			if (id === "./sub2apiPanelSession") {
+				return { fetchSub2ApiPanelBalanceWithRefresh: async () => ({ ok: false, reason: "failed", tokens: { accessToken: "" } }) };
+			}
+			// 兜底：相对 specifier 指向未显式 stub 的 .ts 源文件时，按 ConfigManager 所在目录
+			// （src/main/config）解析成绝对路径再 require（node 24 类型剥离只认带扩展名的路径；
+			// ConfigManager 每加一个 import 都会走到这里）。
+			try {
+				return require(id);
+			} catch (error) {
+				if (id.startsWith(".") && error && typeof error === "object" && error.code === "MODULE_NOT_FOUND") {
+					return require(path.resolve("src/main/config", `${id}.ts`));
+				}
+				throw error;
+			}
+		},
+	};
+	vm.runInNewContext(outputText, sandbox, { filename: "ConfigManager.ts" });
+	return { ...sandbox.exports, getContent: () => content, writes };
+}
+
+test("preserves POSIX WSL trust keys under Windows path semantics", async () => {
+	const { ConfigManager, getContent, writes } = loadConfigManager();
+	const manager = new ConfigManager("C:\\PiDeck\\config");
+
+	await manager.ensureTrustedDirectory("/root/ba_cli/");
+	assert.deepEqual(JSON.parse(getContent()), { "/root/ba_cli": true });
+	assert.equal(await manager.getProjectTrustDecision("/root/ba_cli/subdir"), true);
+
+	await manager.setProjectTrustDecision("/root/ba_cli/subdir/../private", false);
+	assert.deepEqual(JSON.parse(getContent()), {
+		"/root/ba_cli": true,
+		"/root/ba_cli/private": false,
+	});
+	assert.equal(await manager.getProjectTrustDecision("/root/ba_cli/private/nested"), false);
+	assert.equal(
+		writes.every((write) => write.filePath === "C:\\PiDeck\\config\\trust.json"),
+		true,
+	);
+});
+
+test("retains case-insensitive matching for native Windows trust keys", async () => {
+	const { ConfigManager } = loadConfigManager();
+	const manager = new ConfigManager("C:\\PiDeck\\config");
+
+	await manager.setProjectTrustDecision("C:\\Repo", true);
+	assert.equal(await manager.getProjectTrustDecision("c:\\repo\\child"), true);
+});

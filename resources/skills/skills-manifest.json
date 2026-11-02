@@ -1,0 +1,38 @@
+{
+  "schemaVersion": 1,
+  "version": "1.0.0",
+  "bundleSha256": "990dcc6803258ec854629146b8f321b4d65db2cdadf56d9d25d8390fcecc0e85",
+  "fileCount": 6,
+  "files": [
+    {
+      "name": "apix-mcp-author/SKILL.md",
+      "sha256": "da8cfae708a35e2898e024a4a1346e3b279c2a89fe7c4ef4e06c7eb09492413b",
+      "bytes": 7863
+    },
+    {
+      "name": "apix-skill-author/SKILL.md",
+      "sha256": "6b2271676aac74b4022de8fff9d80c257c4c2852bcece2ae007a44281b344eb3",
+      "bytes": 11208
+    },
+    {
+      "name": "image-gen/SKILL.md",
+      "sha256": "44be5e6782d1665b32801a20de92f4f1ccba20a26f0e6134f505ded36a1b6862",
+      "bytes": 8177
+    },
+    {
+      "name": "mcp-setup/SKILL.md",
+      "sha256": "5e786339e2af6defbcbf7a047e8cee662b88afc25930f46b01e1c1002c102329",
+      "bytes": 4767
+    },
+    {
+      "name": "pideck-doctor/SKILL.md",
+      "sha256": "18f79100a9ae5b8800cb9d3970ef11fee2049db88b9f299e1f5c72c478d2e81d",
+      "bytes": 4784
+    },
+    {
+      "name": "usage-probe/SKILL.md",
+      "sha256": "7a09edba8411783f83ba2c5151f2499d77b74b2b149582fd8a4755440266909b",
+      "bytes": 9170
+    }
+  ]
+}

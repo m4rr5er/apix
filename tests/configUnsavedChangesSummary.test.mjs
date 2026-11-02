@@ -1,0 +1,24 @@
+import assert from "node:assert/strict";
+import { test } from "node:test";
+import { readFileSync } from "node:fs";
+import { loadTsCommonJs } from "./helpers/loadTsCommonJs.mjs";
+
+const { summarizeConfigUnsavedChanges, formatConfigUnsavedMessage } = loadTsCommonJs("src/renderer/src/config/configUnsavedChangesSummary.ts");
+const i18n = loadTsCommonJs("src/renderer/src/i18n.ts");
+const configModal = readFileSync("src/renderer/src/ConfigModal.tsx", "utf8");
+
+test("无脏标记时返回 null，回退到通用未保存文案", () => {
+	assert.equal(summarizeConfigUnsavedChanges([]), null);
+	assert.equal(
+		formatConfigUnsavedMessage(null, (key) => `#${key}`),
+		"#config.unsavedMessage",
+	);
+});
+
+test("多条脏 tab 时单行兜底文案带计数，插值用单花括号（t() 契约）", () => {
+	const zh = String(i18n.exports?.rendererCopy ?? "");
+	const summary = summarizeConfigUnsavedChanges(["config:models", "security"]);
+	const text = formatConfigUnsavedMessage(summary, (key, params) => (params ? `${key}:${JSON.stringify(params)}` : key));
+	assert.match(text, /count/);
+	assert.doesNotMatch(zh, /\{\{tab\}\}/);
+});

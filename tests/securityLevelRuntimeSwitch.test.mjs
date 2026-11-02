@@ -1,0 +1,39 @@
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import test from "node:test";
+
+/**
+ * 安全级别运行中切换（issue #146 延伸）。
+ *
+ * 与思考强度不同，安全级别不是 pi 的生成参数：
+ * - 切换 = 写 security-policy.json 策略快照（SecurityStore.writeSnapshot）；
+ * - pi-deck-security-gate 扩展在每次工具调用时按 mtime 重读快照（2s throttle，见
+ *   resources/extensions/pi-deck-security-gate.ts loadSnapshot），即「即时生效」；
+ * - 因此没有「下一轮才生效」的延迟语义，UI 只需放开运行中禁用，无需 pending 指示。
+ */
+
+test("契约: SecurityLevelMenu 自身仍以 props.disabled 为准（不做运行态特判）", () => {
+	const menu = readFileSync("src/renderer/src/components/session/SecurityLevelMenu.tsx", "utf8");
+	// 按钮禁用 = 外部传入 disabled 或保存中；菜单项在 enabled=false 时禁用
+	assert.match(menu, /disabled=\{props\.disabled \|\| saving\}/);
+	assert.match(menu, /disabled={!enabled || props.disabled || saving}/);
+});
+
+test("契约: ACP 后端不渲染安全控制位（权限由 agent CLI 的 request_permission 接管，m01733）", () => {
+	const control = readFileSync("src/renderer/src/components/session/SecurityControl.tsx", "utf8");
+	// 空白容忍：acp 分支必须先于 pi 兑底分支出现，否则会被兑底的 SecurityLevelMenu 接住
+	const acpBranch = control.match(/if\s*\(props\.backend === "acp"\)\s*\{[\s\S]*?return null;[\s\S]*?\}/);
+	assert.ok(acpBranch, "SecurityControl 需对 backend=acp 显式 return null");
+	const acpIndex = acpBranch.index ?? -1;
+	const fallbackIndex = control.indexOf("<SecurityLevelMenu");
+	assert.ok(acpIndex >= 0 && fallbackIndex >= 0 && acpIndex < fallbackIndex, "acp 分支必须排在 SecurityLevelMenu 兑底之前");
+});
+
+test("契约: 主进程写快照链路无 busy 校验（切换即时生效）", () => {
+	const ipc = readFileSync("src/main/ipc/securityIpc.ts", "utf8");
+	// handler 只做输入校验，不检查会话运行状态
+	assert.doesNotMatch(ipc, /isBusy|isStreaming|runtime/);
+	const store = readFileSync("src/main/security/SecurityStore.ts", "utf8");
+	assert.match(store, /writeSnapshot/);
+	assert.match(store, /security-policy\.json/);
+});

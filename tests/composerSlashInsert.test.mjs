@@ -1,0 +1,51 @@
+// 技能 / Prompt 选择器的「插入 /命令」纯函数测试：
+// appendSlashCommandToDraft 保证命令 token 与已有草稿不粘连（空格语义），
+// 空草稿直接以命令开头，回车即可发送。走真实 TS 源码（同 composerBehavior.test.mjs 模式）。
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import test from "node:test";
+import { loadTsCommonJs } from "./helpers/loadTsCommonJs.mjs";
+
+function loadComposerBehaviorModule() {
+	return loadTsCommonJs("src/renderer/src/composerBehavior.ts");
+}
+
+const { appendContentToDraft, appendSlashCommandToDraft, stripMarkdownFrontmatter, toSkillInvocationToken } = loadComposerBehaviorModule();
+const controller = readFileSync("src/renderer/src/hooks/useSessionComposerController.ts", "utf8");
+const skillPicker = readFileSync("src/renderer/src/components/session/ComposerSkillPicker.tsx", "utf8");
+
+test("空草稿：直接以 /命令 开头（回车即可发送）", () => {
+	assert.equal(appendSlashCommandToDraft("", "grill-me"), "/grill-me ");
+	assert.equal(appendSlashCommandToDraft("   ", "grill-me"), "/grill-me ");
+});
+
+test("非空草稿：先补一个空格再接 /命令，不与已有内容粘连", () => {
+	assert.equal(appendSlashCommandToDraft("帮我审查一下方案", "grill-me"), "帮我审查一下方案 /grill-me ");
+});
+
+test("草稿尾随空白：trimEnd 后只保留一个分隔空格，不产生双空格", () => {
+	assert.equal(appendSlashCommandToDraft("帮我审查一下方案   ", "grill-me"), "帮我审查一下方案 /grill-me ");
+});
+
+test("插入完整内容：空草稿直接以正文开头，非空草稿换行衔接不粘连", () => {
+	assert.equal(appendContentToDraft("", "# 帮我审查方案\n按结构逐点给出意见"), "# 帮我审查方案\n按结构逐点给出意见");
+	assert.equal(appendContentToDraft("先讨论一下", "# 技能指令正文"), "先讨论一下\n# 技能指令正文");
+	// 草稿尾随空白与新段落之间不应出现多余空行/粘连
+	assert.equal(appendContentToDraft("草稿结尾   ", "第二段正文"), "草稿结尾\n第二段正文");
+});
+
+test("剥离 frontmatter 描述头：插入全文时不带 name/description 元数据头", () => {
+	// 标准模板：--- 头 + 正文
+	assert.equal(stripMarkdownFrontmatter("---\nname: review\ndescription: 代码评审\n---\n请帮我做一个代码评审，重点关注：\n1. 边界条件\n2. 异常处理"), "请帮我做一个代码评审，重点关注：\n1. 边界条件\n2. 异常处理");
+	// frontmatter 后有空白行：前导空行一并去掉，正文格式不乱
+	assert.equal(stripMarkdownFrontmatter("---\nname: x\n---\n\n正文内容\n"), "正文内容\n");
+	// 无 frontmatter 的纯正文：原样返回，不受影响
+	assert.equal(stripMarkdownFrontmatter("直接是正文，没有头"), "直接是正文，没有头");
+	// CRLF 文件头同样剥离
+	assert.equal(stripMarkdownFrontmatter("---\r\nname: y\r\n---\r\n\r\nCRLF 正文\r\n"), "CRLF 正文\r\n");
+});
+
+test("插入完整内容：空正文返回原草稿（幂等，不产生空行残留）", () => {
+	assert.equal(appendContentToDraft("已有草稿", ""), "已有草稿");
+	assert.equal(appendContentToDraft("", ""), "");
+});
