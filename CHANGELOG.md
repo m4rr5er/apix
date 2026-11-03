@@ -1,3 +1,18 @@
+## v1.0.2 (2026-11-04)
+
+This is a polish release for 1.0.1: the Today's Usage entry no longer disappears when nothing is configured or enabled, the single-provider layout is cleaner, and the README now describes APIX itself.
+
+### ✨ Improvements
+- **Today's Usage entry stays available** — When nothing is configured it points users to setup; when providers are configured but off it points them to enable one. Both states open Settings → Usage Query directly.
+- **Single-provider layout** — Showing only AI-AAA or only Qoder now uses a clean standalone layout without the combined-view divider or extra spacing.
+- **APIX README** — The Chinese and English READMEs now document APIX features, installation, usage query, updates, development and layout instead of upstream copy.
+
+### 🐛 Fixes
+- **Usage entry disappeared** — The entry is no longer hidden when both provider switches are off; users can still open it and jump to configuration.
+- **Single-provider visual gap** — Qoder-only mode no longer keeps the top border and extra spacing from the combined layout.
+
+---
+
 ## v1.0.1 (2026-11-02)
 
 This release moves in-app updates to APIX's own release repository and centralizes Today's usage provider switches in Settings.

@@ -2,7 +2,7 @@
  * 本文件由 `node scripts/genZhTwCopy.mjs` 生成，请勿手改。
  * 文案改动请修改对应的 zh-CN 源文件后重新生成；转换规则见该脚本的 OVERRIDES。
  * 注释刻意保留简体：属于开发者视角文本，不面向用户。
- * source-sha256: 4d912df50b253fac98d863df157fa4335cc7e9c17535f1f488f4131b8d8cc346（来自 src/renderer/src/i18n/rendererCopy.zh-CN.ts 的词典区块指纹，由 tests/zhTwCopy.test.mjs 校验新鲜度）
+ * source-sha256: c3714948c62e63676b10bb588c59d3a612f9a4f59479ef205e2c3c26617eabc1（来自 src/renderer/src/i18n/rendererCopy.zh-CN.ts 的词典区块指纹，由 tests/zhTwCopy.test.mjs 校验新鲜度）
  */
 import { mainProcessZhTW } from "../../../shared/i18n/mainProcessCopy.zh-TW";
 import type { TranslationKey } from "./rendererCopy.zh-CN";
@@ -6295,6 +6295,11 @@ export const zhTW: Record<TranslationKey, string> = {
 	"memo.placeholder": "寫下需要記住的內容…",
 	"memo.characterCount": "{count} 個字元",
 	"memo.save": "儲存",
+	"aiAaaUsage.setupTitle": "還沒有配置用量查詢",
+	"aiAaaUsage.setupHint": "到「設定 → 用量查詢」配置 AI-AAA 或 Qoder，並開啟要顯示的開關。",
+	"aiAaaUsage.notEnabledTitle": "用量查詢未開啟",
+	"aiAaaUsage.notEnabledHint": "到「設定 → 用量查詢」開啟要顯示的供應商開關。",
+	"aiAaaUsage.goConfigure": "去配置",
 	"aiAaaUsage.tooltip": "今日用量",
 	"aiAaaUsage.title": "今日用量",
 	"aiAaaUsage.subtitle": "AI-AAA 閘道器 / Qoder Credits",

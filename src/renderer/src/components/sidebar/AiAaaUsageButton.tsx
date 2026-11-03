@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useAtomValue } from "jotai";
+import { useAtomValue, useSetAtom } from "jotai";
 import { AlertCircle, ChartColumnBig, RefreshCw } from "lucide-react";
 import type { AiAaaUsageResult, AiAaaUsageSnapshot } from "../../../../shared/types/aiAaaUsage";
 import type { QoderQuotaBucket, QoderUsageResult, QoderUsageSnapshot } from "../../../../shared/types/qoderUsage";
@@ -10,7 +10,8 @@ import { Badge } from "../ui-shadcn/badge";
 import { Button } from "../ui-shadcn/button";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui-shadcn/popover";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui-shadcn/tooltip";
-import { usageQueryProvidersAtom } from "../../atoms/app-ui-atoms";
+import { openSettingsAtom, usageQueryProvidersAtom } from "../../atoms/app-ui-atoms";
+import type { UsageQueryProviderStatus } from "../../../../shared/types/usageQuery";
 
 function formatTime(ts: number): string {
 	try {
@@ -140,15 +141,15 @@ function QoderBucketRow(props: { label: string; bucket: QoderQuotaBucket }) {
 	);
 }
 
-function QoderUsageBody(props: { snapshot: QoderUsageSnapshot }) {
-	const { snapshot } = props;
+function QoderUsageBody(props: { snapshot: QoderUsageSnapshot; standalone?: boolean }) {
+	const { snapshot, standalone = false } = props;
 	const buckets = [
 		{ key: "user", label: t("qoderUsage.personal"), bucket: snapshot.userQuota },
 		{ key: "addon", label: t("qoderUsage.addOn"), bucket: snapshot.addOnQuota },
 		{ key: "org", label: t("qoderUsage.org"), bucket: snapshot.orgResourcePackage },
 	].filter((item): item is { key: string; label: string; bucket: QoderQuotaBucket } => Boolean(item.bucket));
 	return (
-		<div className="border-t border-border/60 pt-3">
+		<div className={standalone ? "" : "border-t border-border/60 pt-3"}>
 			<div className="flex items-start justify-between gap-2">
 				<div className="min-w-0">
 					<div className="font-medium text-foreground">{t("qoderUsage.title")}</div>
@@ -167,13 +168,13 @@ function QoderUsageBody(props: { snapshot: QoderUsageSnapshot }) {
 	);
 }
 
-function QoderUsageSection(props: { result: QoderUsageResult | null; loading: boolean; onRetry: () => void }) {
+function QoderUsageSection(props: { result: QoderUsageResult | null; loading: boolean; onRetry: () => void; standalone?: boolean }) {
 	if (props.result && !props.result.ok && props.result.code === "not-configured") return null;
 	if (!props.result && !props.loading) return null;
 	return (
-		<div className="mt-3">
+		<div className={props.standalone ? "" : "mt-3"}>
 			{props.loading && !props.result ? <div className="py-2 text-center text-caption text-muted-foreground">{t("qoderUsage.loading")}</div> : null}
-			{props.result?.ok ? <QoderUsageBody snapshot={props.result.snapshot} /> : null}
+			{props.result?.ok ? <QoderUsageBody snapshot={props.result.snapshot} standalone={props.standalone} /> : null}
 			{props.result && !props.result.ok ? (
 				<div className="flex items-center justify-between gap-2 rounded-md border border-warning/20 bg-warning-soft px-2.5 py-2 text-caption">
 					<span className="min-w-0 text-muted-foreground">{props.result.code === "unauthorized" ? t("qoderUsage.unauthorized") : t("qoderUsage.queryFailed")}</span>
@@ -195,6 +196,17 @@ export function AiAaaUsageButton() {
 	const enabledProviders = useAtomValue(usageQueryProvidersAtom);
 	const aibvvEnabled = enabledProviders.includes("aibvv");
 	const qoderEnabled = enabledProviders.includes("qoder");
+	const hasEnabled = aibvvEnabled || qoderEnabled;
+	const openSettings = useSetAtom(openSettingsAtom);
+	const [availability, setAvailability] = useState<UsageQueryProviderStatus | null>(null);
+
+	const refreshAvailability = useCallback(async () => {
+		try {
+			setAvailability(await window.piDesktop.usageQuery.status());
+		} catch {
+			setAvailability({ aibvv: false, qoder: false });
+		}
+	}, []);
 
 	const load = useCallback(
 		async (force: boolean) => {
@@ -217,13 +229,19 @@ export function AiAaaUsageButton() {
 	);
 
 	useEffect(() => {
-		if (open) void load(false);
-	}, [open, load]);
+		if (!open) return;
+		void refreshAvailability();
+		if (hasEnabled) void load(false);
+	}, [open, load, hasEnabled, refreshAvailability]);
 
 	const retry = () => void load(true);
 
-	// 两个开关都关闭 = 左下角完全不展示用量入口（用户明确关闭了这项能力）。
-	if (!aibvvEnabled && !qoderEnabled) return null;
+	const hasConfigured = availability?.aibvv === true || availability?.qoder === true;
+	const needsSetup = !hasEnabled || !hasConfigured;
+	const openUsageSettings = () => {
+		setOpen(false);
+		openSettings({ tab: "usageQuery" });
+	};
 
 	return (
 		<Popover open={open} onOpenChange={setOpen}>
@@ -250,19 +268,32 @@ export function AiAaaUsageButton() {
 					</Button>
 				</div>
 				<div className="p-4">
-					{loading && !result && !qoderResult && <div className="py-6 text-center text-caption text-muted-foreground">{t("aiAaaUsage.loading")}</div>}
-					{aibvvEnabled && result?.ok && <UsageBody snapshot={result.snapshot} />}
-					{aibvvEnabled && result && !result.ok && (
+					{needsSetup ? (
 						<div className="flex flex-col items-center gap-2 py-4 text-center">
 							<AlertCircle className="size-5 text-warning" aria-hidden="true" />
-							<div className="text-control font-medium">{errorCopy(result.code, result.status).title}</div>
-							{errorCopy(result.code, result.status).hint && <div className="text-caption text-muted-foreground">{errorCopy(result.code, result.status).hint}</div>}
-							<Button type="button" size="sm" variant="secondary" className="mt-1" onClick={retry} disabled={loading}>
-								{t("aiAaaUsage.retry")}
+							<div className="text-control font-medium">{hasEnabled ? t("aiAaaUsage.notEnabledTitle") : t("aiAaaUsage.setupTitle")}</div>
+							<div className="text-caption text-muted-foreground">{hasEnabled ? t("aiAaaUsage.notEnabledHint") : t("aiAaaUsage.setupHint")}</div>
+							<Button type="button" size="sm" variant="secondary" className="mt-1" onClick={openUsageSettings}>
+								{t("aiAaaUsage.goConfigure")}
 							</Button>
 						</div>
+					) : (
+						<>
+							{loading && !result && !qoderResult && <div className="py-6 text-center text-caption text-muted-foreground">{t("aiAaaUsage.loading")}</div>}
+							{aibvvEnabled && result?.ok && <UsageBody snapshot={result.snapshot} />}
+							{aibvvEnabled && result && !result.ok && (
+								<div className="flex flex-col items-center gap-2 py-4 text-center">
+									<AlertCircle className="size-5 text-warning" aria-hidden="true" />
+									<div className="text-control font-medium">{errorCopy(result.code, result.status).title}</div>
+									{errorCopy(result.code, result.status).hint && <div className="text-caption text-muted-foreground">{errorCopy(result.code, result.status).hint}</div>}
+									<Button type="button" size="sm" variant="secondary" className="mt-1" onClick={retry} disabled={loading}>
+										{t("aiAaaUsage.retry")}
+									</Button>
+								</div>
+							)}
+							{qoderEnabled && <QoderUsageSection result={qoderResult} loading={loading} onRetry={retry} standalone={!aibvvEnabled} />}
+						</>
 					)}
-					{qoderEnabled && <QoderUsageSection result={qoderResult} loading={loading} onRetry={retry} />}
 				</div>
 			</PopoverContent>
 		</Popover>
