@@ -1,7 +1,7 @@
 # APIX
 
 ![Status](https://img.shields.io/badge/status-stable-green)
-![Version](https://img.shields.io/badge/version-1.0.2-blue)
+![Version](https://img.shields.io/badge/version-1.0.3-blue)
 ![License](https://img.shields.io/badge/license-MIT-blue)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey)
 ![Electron](https://img.shields.io/badge/Electron-43-47848f)
@@ -9,7 +9,7 @@
 
 **APIX 是一个基于 [pi](https://pi.dev) 的本地 AI 编码工作台。** 它把 pi Agent 的会话、项目、模型配置、Git、终端和扩展资源收进一个原生桌面应用，适合长期在多个本地仓库之间工作的开发者。
 
-> **最新版本 v1.0.2**（2026-11-04）
+> **最新版本 v1.0.3**（2026-11-04）
 
 下载安装包：[GitHub Releases](https://github.com/m4rr5er/apix/releases)
 
@@ -54,8 +54,8 @@ APIX 不是另一个 Agent 引擎，也不是浏览器套壳。Agent 行为、�
 
 从 [Releases](https://github.com/m4rr5er/apix/releases) 下载：
 
-- `APIX-1.0.2-setup.exe`：Windows 安装版
-- `APIX-1.0.2-portable.exe`：Windows 便携版
+- `APIX-1.0.3-setup.exe`：Windows 安装版
+- `APIX-1.0.3-portable.exe`：Windows 便携版
 
 安装版与便携版共用 APIX 数据目录；升级不会删除你的 pi 配置和会话。
 

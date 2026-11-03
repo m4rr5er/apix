@@ -1,3 +1,13 @@
+## v1.0.3 (2026-11-04)
+
+This release fixes Qoder PAT sign-in on a fresh machine where the provider extension is not installed yet.
+
+### 🐛 Fixes
+- **Qoder PAT sign-in** — If `@jischeng/pi-provider-qoder` is missing, the login flow now installs the extension and retries model discovery instead of showing only other providers' models.
+- **Missing-package diagnostics** — Install/model-list failures keep the real command output while redacting the supplied PAT, making network and credential issues easier to diagnose.
+
+---
+
 ## v1.0.2 (2026-11-04)
 
 This is a polish release for 1.0.1: the Today's Usage entry no longer disappears when nothing is configured or enabled, the single-provider layout is cleaner, and the README now describes APIX itself.
