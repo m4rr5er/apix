@@ -40,6 +40,7 @@ import {
 	bumpNewTurnCollapseTickAtom,
 	rpcLoggingAgentIdsAtom,
 	toggleRpcLoggingAgent,
+	usageQueryProvidersAtom,
 } from "./atoms";
 import { type SidebarActions } from "./components/sidebar/SidebarContent";
 import { AppSidebar } from "./components/sidebar/AppSidebar";
@@ -617,6 +618,11 @@ export function App() {
 	useEffect(() => {
 		setDefaultAgentBackend(settings.defaultAgentBackend);
 	}, [settings.defaultAgentBackend, setDefaultAgentBackend]);
+
+	const setUsageQueryProviders = useSetAtom(usageQueryProvidersAtom);
+	useEffect(() => {
+		setUsageQueryProviders(settings.usageQueryProviders ?? []);
+	}, [settings.usageQueryProviders, setUsageQueryProviders]);
 	const effectiveAgentBackend: AgentBackend = "pi";
 
 	const setBusySendDelivery = useSetAtom(busySendDeliveryAtom);

@@ -177,7 +177,7 @@ export class ChangelogService {
 		this.timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
 		this.maxBytes = options.maxBytes ?? DEFAULT_MAX_BYTES;
 		this.branch = options.branch ?? DEFAULT_BRANCH;
-		this.source = options.source ?? (() => "atomgit");
+		this.source = options.source ?? (() => "github");
 		this.cacheDir = options.cacheDir ?? null;
 		this.cacheTtlMs = options.cacheTtlMs ?? CACHE_TTL_MS;
 	}

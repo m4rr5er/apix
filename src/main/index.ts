@@ -325,6 +325,7 @@ import { registerUsageStatsIpc } from "./ipc/usageStatsIpc";
 import { UsageStatsService } from "./usageStats/UsageStatsService";
 import { registerAiAaaUsageIpc } from "./ipc/aiAaaUsageIpc";
 import { registerQoderUsageIpc } from "./ipc/qoderUsageIpc";
+import { registerUsageQueryIpc } from "./ipc/usageQueryIpc";
 import { QoderUsageService } from "./usage/QoderUsageService";
 import { AiAaaUsageService } from "./usage/AiAaaUsageService";
 import { constrainWindowBoundsToWorkArea, type LastWindowBounds, MIN_WINDOW_HEIGHT, MIN_WINDOW_WIDTH, readLastWindowBounds, saveLastWindowBounds } from "./windowState";
@@ -2406,6 +2407,8 @@ function registerIpc() {
 		},
 	});
 	registerQoderUsageIpc(ipcMain, qoderUsageService);
+
+	registerUsageQueryIpc(ipcMain, { getModelsConfig: () => configManager.getModelsConfig(), getAuthConfig: () => configManager.getAuthConfig() });
 
 	registerPiAuthIpc(ipcMain, piAuthService);
 

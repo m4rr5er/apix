@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAtomValue } from "jotai";
 import type { AppSettings, MirrorHealthResult, UpdateSourceId } from "../../../../../shared/types/settings";
-import { ATOMGIT_HOST, UPDATE_SOURCE_MIRRORS, buildCustomSourceFeedUrl, normalizeCustomMirrorHost } from "../../../../../shared/updateSources";
+import { UPDATE_SOURCE_MIRRORS, normalizeCustomMirrorHost } from "../../../../../shared/updateSources";
 import { desktopApi } from "../../../desktopApi";
 import { t } from "../../../i18n";
 import { updateChannelInfoAtom } from "../../../atoms/channelSwitchAtoms";
@@ -26,7 +26,8 @@ const HEALTH_DOT_CLASS: Record<MirrorHealthResult["status"], string> = {
  */
 export function UpdateSourceSetting(props: { draft: AppSettings; updateDraft: (patch: Partial<AppSettings>) => void }) {
 	const { draft, updateDraft } = props;
-	const source: UpdateSourceId = draft.updateSource ?? "atomgit";
+	// APIX 只发布 GitHub Release；旧设置里的 atomgit 在 SettingsStore 读取时已迁移为 github。
+	const source: UpdateSourceId = "github";
 	// dev 包锁定官方 GitHub 源（与 UpdateService 同款语义）：AtomGit 镜像只分发 stable 产物，
 	// dev 的 0.8.0-beta.* 仅存在于 GitHub Releases；此处仅展示层置灰+强制选中，真实强制在主进程。
 	const channelInfo = useAtomValue(updateChannelInfoAtom);
@@ -37,12 +38,8 @@ export function UpdateSourceSetting(props: { draft: AppSettings; updateDraft: (p
 	const [mirrorHealth, setMirrorHealth] = useState<Record<string, MirrorHealthResult> | null>(null);
 	const [probing, setProbing] = useState(false);
 
-	// 当前生效的更新源地址（github = null → 内置官方通道；atomgit → AtomGit generic feed 地址）。
-	const activeFeedUrl: string | null = (() => {
-		if (source === "github") return null;
-		const mirror = UPDATE_SOURCE_MIRRORS.find((m) => m.id === source);
-		return mirror ? buildCustomSourceFeedUrl(mirror.host) : buildCustomSourceFeedUrl(ATOMGIT_HOST);
-	})();
+	// 当前生效的更新源地址：GitHub 为空 → 走 app-update.yml 的原生 GitHub provider。
+	const activeFeedUrl: string | null = null;
 
 	// 并行体检内置更新源；期间锁定 probing，防止重复触发（重新检测按钮也走同一入口）。
 	const probeMirrors = useCallback(async () => {
@@ -115,23 +112,6 @@ export function UpdateSourceSetting(props: { draft: AppSettings; updateDraft: (p
 
 			{/* dev 包锁定说明：解释为何 AtomGit 不可选（镜像无预发布产物） */}
 			{devLocked && <p className="pl-4 text-xs text-muted-foreground">{t("settings.updateSourceDevLocked")}</p>}
-
-			{/* 体检状态栏：仅 AtomGit 展示；github 官方链路不参与内置探测（dev 锁定后 effective 恒 github，一并隐藏） */}
-			{effectiveSource === "atomgit" &&
-				(() => {
-					const text = mirrorHealth?.atomgit ? healthText("atomgit") : null;
-					return (
-						<div className="flex items-center justify-between gap-2 pl-4 text-xs text-muted-foreground">
-							<span className="flex items-center gap-2">
-								{healthDot("atomgit")}
-								{probing || !text ? t("settings.updateMirrorChecking") : text}
-							</span>
-							<Button variant="ghost" size="sm" className="h-6 px-2 text-xs" disabled={probing} onClick={() => void probeMirrors()}>
-								{t("settings.updateMirrorRetest")}
-							</Button>
-						</div>
-					);
-				})()}
 		</>
 	);
 }

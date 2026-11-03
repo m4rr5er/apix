@@ -174,6 +174,8 @@ const SETTINGS_ROW_ANCHORS = [
 		keywords: ["遥测", "telemetry", "匿名统计", "上报", "隐私"],
 	},
 
+	{ tab: "usageQuery", slug: "usage-query-aibvv", labelKey: "settings.usageQuery.aibvv", keywords: ["用量查询", "aibvv", "aibvv.cn", "ai-aaa", "余额", "今日用量", "usage query", "balance"] },
+	{ tab: "usageQuery", slug: "usage-query-qoder", labelKey: "settings.usageQuery.qoder", keywords: ["用量查询", "qoder", "credits", "积分", "今日用量", "usage query"] },
 	{ tab: "common", slug: "common-tps-display-mode", labelKey: "settings.tpsDisplayMode", keywords: ["tps", "流式", "端到端", "生成速度", "streaming", "end-to-end", "throughput"] },
 	{
 		tab: "common",

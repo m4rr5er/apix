@@ -23,10 +23,10 @@ export type { AutoUpdaterLike, AutoUpdaterEventHandlers } from "./autoUpdaterTyp
 export const UPDATE_FEED_URL_ENV = "PIDEK_UPDATE_FEED_URL";
 
 /** 兜底更新缓存目录名，与 electron-builder 默认规则（name + "-updater"）对齐。 */
-export const DEFAULT_UPDATER_CACHE_DIR_NAME = "pideck-updater";
+export const DEFAULT_UPDATER_CACHE_DIR_NAME = "apix-updater";
 
 /** 自动生成的兜底配置文件文件名，存放在应用 userData 目录中。 */
-export const FALLBACK_APP_UPDATE_CONFIG_FILENAME = "pideck-fallback-app-update.yml";
+export const FALLBACK_APP_UPDATE_CONFIG_FILENAME = "apix-fallback-app-update.yml";
 
 /**
  * 生成兜底的 app-update.yml 内容。

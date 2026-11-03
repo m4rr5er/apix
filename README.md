@@ -11,7 +11,7 @@
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey)
 ![Electron](https://img.shields.io/badge/Electron-38-47848f)
 ![React](https://img.shields.io/badge/React-19-61dafb)
-![Version](https://img.shields.io/badge/version-1.0.0-blue)
+![Version](https://img.shields.io/badge/version-1.0.1-blue)
 
 国内 AtomGit 托管：https://atomgit.com/ayuayue/PiDeck
 <!-- 预留 AtomGit G-Star 徽章位（替换占位链接后启用）
@@ -101,7 +101,7 @@
 
 ## 📋 更新日志
 
-> **最新版本 v1.0.0**（2026-11-02）
+> **最新版本 v1.0.1**（2026-11-02）
 
 ### v0.9.7 更新亮点
 - 🚀 **思考强度选择器重做：ZCode 同款渐变强度条**

@@ -20,7 +20,6 @@ import { showNotice } from "../utils/notice";
 import { applyModelPatches, computeModelSpecPatches, looksDeepSeekBacked } from "../utils/modelSpecAutoFill";
 import type { FetchedModel, ConfigProxyMode } from "../../../shared/types/fetchedModel";
 import { ProviderUsageInline } from "../components/app/ProviderUsageInline";
-import { UsageQueryEntryButton } from "../components/app/UsageQueryEntryButton";
 import { ProviderConnectionForm } from "./ProviderConnectionForm";
 import { AddProviderDialog } from "./AddProviderDialog";
 import type { ProviderDialogInitial } from "./AddProviderDialog";
@@ -522,7 +521,6 @@ export function ModelsTab(props: {
 													<Eye size={14} />
 												</Button>
 
-												<UsageQueryEntryButton provider={name} onOpen={() => props.onOpenUsageProbeDialog(name)} />
 												<Button
 													variant="ghost"
 													size="icon-sm"

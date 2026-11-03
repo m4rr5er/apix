@@ -1,3 +1,21 @@
+## v1.0.1 (2026-11-02)
+
+This release moves in-app updates to APIX's own release repository and centralizes Today's usage provider switches in Settings.
+
+### 🚀 New Features
+- **Settings → Usage Query** — A dedicated settings page for the built-in AI-AAA (aibvv.cn) and Qoder usage sources. Configure the provider in Config Management first, then turn on its switch to show its balance or credits in Today's usage at the bottom-left. Either provider can be enabled independently.
+- **Configuration status detection** — The page reads provider configuration without making provider requests: Qoder uses its Provider sign-in credentials, AI-AAA uses the models.json API key. The switch stays disabled with a Configure entry until the provider is ready.
+- **In-app updates follow APIX** — Update coordinates now point at APIX's GitHub Releases, with GitHub as the default source; old AtomGit settings migrate to GitHub instead of continuing to target upstream PiDeck.
+
+### ✨ Improvements
+- **Per-provider usage-query entries removed from Models/Auth pages** — Provider cards and auth rows no longer duplicate the usage-query button; the Settings page owns the switches, and enabled usage still appears at the bottom-left.
+- **Today's usage follows the switches** — When both providers are off the bottom-left entry is hidden; enabling only one queries and displays only that provider, avoiding unnecessary requests.
+
+### 🐛 Fixes
+- **Wrong update repository** — Fixes installed builds still targeting upstream PiDeck. APIX 1.0.1 and later check only APIX releases (the repository must be public for electron-updater to read it anonymously).
+
+---
+
 ## v1.0.0 (2026-11-02)
 
 This release migrates APIX onto the PiDeck 0.9.7 Electron baseline while keeping APIX branding and workflows, with pi as the only agent backend; the Tauri shell and DSH backend are removed.

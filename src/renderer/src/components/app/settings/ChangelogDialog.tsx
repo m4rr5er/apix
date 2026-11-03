@@ -159,4 +159,4 @@ export function ChangelogDialog(props: {
  * 与主进程 ChangelogService.changelogPageUrl 同源（同样指向 AtomGit blob 页）；
  * 主进程返回的 pageUrl 始终可用，此常量只用于 IPC 本身抛错的极端场景。
  */
-const DEFAULT_PAGE_URL = "https://atomgit.com/ayuayue/PiDeck/blob/main/CHANGELOG.zh-CN.md";
+const DEFAULT_PAGE_URL = "https://github.com/m4rr5er/apix/blob/main/CHANGELOG.zh-CN.md";

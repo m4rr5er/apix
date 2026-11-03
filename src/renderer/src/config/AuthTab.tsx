@@ -10,7 +10,6 @@ import { Input } from "../components/ui-shadcn/input";
 import { Checkbox } from "../components/ui-shadcn/checkbox";
 import { Label } from "../components/ui-shadcn/label";
 import { ProviderUsageInline } from "../components/app/ProviderUsageInline";
-import { UsageQueryEntryButton } from "../components/app/UsageQueryEntryButton";
 import { applyProviderOrder } from "../utils/providerOrder";
 import { useProviderReorder } from "../hooks/useProviderReorder";
 
@@ -400,7 +399,6 @@ export function AuthTab(props: {
 										<ProviderUsageInline provider={name} variant="card" />
 									</span>
 									<div className="flex items-center gap-1">
-										<UsageQueryEntryButton provider={name} onOpen={() => props.onOpenUsageProbeDialog(name)} />
 										{onToggleHiddenAuthProvider && (
 											<Button
 												variant="ghost"

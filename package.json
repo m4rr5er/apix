@@ -1,6 +1,6 @@
 {
   "name": "apix",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "packageManager": "npm@11.6.2",
   "engines": {
     "npm": "^11.6.2"
@@ -18,13 +18,13 @@
       "url": "https://github.com/1900EasonJin"
     }
   ],
-  "homepage": "https://github.com/ayuayue/APIX#readme",
+  "homepage": "https://github.com/m4rr5er/apix#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/ayuayue/APIX.git"
+    "url": "git+https://github.com/m4rr5er/apix.git"
   },
   "bugs": {
-    "url": "https://github.com/ayuayue/APIX/issues"
+    "url": "https://github.com/m4rr5er/apix/issues"
   },
   "keywords": [
     "pi",
@@ -138,7 +138,7 @@
     "productName": "APIX",
     "protocols": [
       {
-        "name": "PiDeck Agent Link",
+        "name": "APIX Agent Link",
         "schemes": [
           "pideck"
         ]
@@ -304,7 +304,7 @@
     ],
     "extraMetadata": {
       "main": "out/main/index.js",
-      "productName": "PiDeck"
+      "productName": "APIX"
     },
     "win": {
       "icon": "build/icon.ico",
@@ -334,7 +334,7 @@
       "category": "public.app-category.developer-tools",
       "identity": "-",
       "extendInfo": {
-        "NSLocalNetworkUsageDescription": "PiDeck connects to AI model services and servers on your local network, including SSH hosts opened in the terminal."
+        "NSLocalNetworkUsageDescription": "APIX connects to AI model services and servers on your local network, including SSH hosts opened in the terminal."
       },
       "artifactName": "${productName}-${version}-${arch}.${ext}"
     },
@@ -346,7 +346,7 @@
         "tar.gz"
       ],
       "category": "Development",
-      "maintainer": "ayuayue <ayuayue@users.noreply.github.com>",
+      "maintainer": "m4rr5er <m4rr5er@users.noreply.github.com>",
       "executableName": "pideck",
       "artifactName": "${productName}-${version}-${arch}.${ext}"
     },
@@ -364,8 +364,8 @@
     },
     "publish": {
       "provider": "github",
-      "owner": "ayuayue",
-      "repo": "PiDeck"
+      "owner": "m4rr5er",
+      "repo": "apix"
     }
   },
   "devDependencies": {

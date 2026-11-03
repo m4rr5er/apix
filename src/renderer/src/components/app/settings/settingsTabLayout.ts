@@ -24,6 +24,7 @@ export type SettingsTabLayoutEntry = {
 
 export const SETTINGS_TAB_LAYOUT: readonly SettingsTabLayoutEntry[] = [
 	{ id: "common" },
+	{ id: "usageQuery" },
 	{ id: "shortcuts" },
 	{ id: "notification" },
 	{ id: "appearance" },
@@ -59,6 +60,7 @@ export const SETTINGS_TAB_IDS: readonly SettingsTabId[] = SETTINGS_TAB_LAYOUT.ma
  */
 export const SETTINGS_TAB_LABEL_KEYS: Record<SettingsTabId, TranslationKey> = {
 	common: "settings.tabs.common",
+	usageQuery: "settings.tabs.usageQuery",
 	shortcuts: "settings.tabs.shortcuts",
 	appearance: "settings.tabs.appearance",
 	terminal: "settings.tabs.terminal",
@@ -87,6 +89,7 @@ export const SETTINGS_TAB_LABEL_KEYS: Record<SettingsTabId, TranslationKey> = {
  */
 export const SETTINGS_TAB_KEYWORDS: Record<SettingsTabId, readonly string[]> = {
 	common: ["常用", "基础", "通用", "general", "基本设置"],
+	usageQuery: ["用量查询", "今日用量", "余额", "credits", "usage query", "balance"],
 	shortcuts: ["快捷键", "按键", "热键", "keybind", "hotkey", "shortcut"],
 	appearance: ["外观", "主题", "深色", "浅色", "字体", "theme", "appearance", "dark"],
 	terminal: ["终端", "配色", "字体", "光标", "terminal", "console", "font", "shell"],

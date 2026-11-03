@@ -3,7 +3,7 @@ import { getDefaultStore, useAtom, useAtomValue } from "jotai";
 import { settingsFocusAtom, type SettingsPaneId, type SettingsSectionId, type SettingsTabId } from "../../atoms";
 import { hasPendingUpdateAtom, updateStatusAtom } from "../../atoms/update-atoms";
 import { useSettingsFocus } from "./settings/useSettingsFocus.ts";
-import { Settings2, Network, Wrench, PawPrint, Bell, Trash2, Brush, Eye, ChartColumnBig, Activity, MessageSquare, ImageIcon, DatabaseBackup, Globe, FileCode2, GitBranch, Loader2, SlidersHorizontal, MonitorCog, Keyboard, TerminalSquare, X, Bot, Puzzle, Clapperboard } from "lucide-react";
+import { Settings2, Network, Wrench, PawPrint, Bell, Trash2, Brush, Eye, ChartColumnBig, Activity, MessageSquare, ImageIcon, DatabaseBackup, Globe, FileCode2, GitBranch, Loader2, SlidersHorizontal, MonitorCog, Keyboard, TerminalSquare, X, Bot, Puzzle, Clapperboard, Gauge } from "lucide-react";
 import { t, type TranslationKey } from "../../i18n";
 import { applyAppearanceAttributes, type AppearanceSettings } from "../../themeAppearance";
 import { applyCustomThemeTokens, applyFontSizeAttributes } from "../../hooks/appearance/useAppAppearance";
@@ -31,6 +31,7 @@ import type { AppSettings, AppInfo, AvailableModel, PiInstallation, PiInstallSta
 // ── 各 tab 内容 lazy 加载：首开只下载壳 + 当前 tab 的 chunk（qrcode/表格/日志查看器等
 //    重依赖随各自 tab 拆包），切换到某 tab 时才加载其 chunk（本地文件，秒级以内）。──
 const CommonTab = lazy(() => import("./settings/CommonTab").then((m) => ({ default: m.CommonTab })));
+const UsageQuerySettingsTab = lazy(() => import("./settings/UsageQuerySettingsTab").then((m) => ({ default: m.UsageQuerySettingsTab })));
 const ShortcutsTab = lazy(() => import("./settings/ShortcutsTab").then((m) => ({ default: m.ShortcutsTab })));
 const AppearanceTab = lazy(() => import("./settings/AppearanceTab").then((m) => ({ default: m.AppearanceTab })));
 const ProxyTab = lazy(() => import("./settings/ProxyTab").then((m) => ({ default: m.ProxyTab })));
@@ -255,6 +256,7 @@ export const SettingsModal = memo(function SettingsModal(props: SettingsModalPro
  */
 const TAB_META: Record<SettingsTabId, { labelKey: TranslationKey; icon: ReactNode }> = {
 	common: { labelKey: SETTINGS_TAB_LABEL_KEYS.common, icon: <Settings2 size={16} /> },
+	usageQuery: { labelKey: SETTINGS_TAB_LABEL_KEYS.usageQuery, icon: <Gauge size={16} /> },
 	shortcuts: { labelKey: SETTINGS_TAB_LABEL_KEYS.shortcuts, icon: <Keyboard size={16} /> },
 	appearance: { labelKey: SETTINGS_TAB_LABEL_KEYS.appearance, icon: <Brush size={16} /> },
 	terminal: { labelKey: SETTINGS_TAB_LABEL_KEYS.terminal, icon: <TerminalSquare size={16} /> },
@@ -843,6 +845,15 @@ function SettingsModalContent(props: SettingsModalProps) {
 									<TabsContent value="common" className="settings-panel min-w-0">
 										<Suspense fallback={<SettingsTabLoading />}>
 											<CommonTab draft={draftSettings} updateDraft={updateDraft} isDirty={isDirty} />
+										</Suspense>
+									</TabsContent>
+								)}
+
+								{/* ── 用量查询：两个内置供应商的开关（今日用量入口的依据） ── */}
+								{activeTab === "usageQuery" && (
+									<TabsContent value="usageQuery" className="settings-panel min-w-0">
+										<Suspense fallback={<SettingsTabLoading />}>
+											<UsageQuerySettingsTab draft={draftSettings} updateDraft={updateDraft} />
 										</Suspense>
 									</TabsContent>
 								)}

@@ -829,6 +829,8 @@ export const ipcChannels = {
 
 	qoderUsageGet: "qoder-usage:get",
 
+	usageQueryStatus: "usage-query:status",
+
 	imagegenGenerate: "imagegen:generate",
 
 	imagegenGetConfig: "imagegen:get-config",

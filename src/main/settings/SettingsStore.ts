@@ -24,6 +24,7 @@ import {
 import { normalizePinnedSessionIds } from "../../shared/pinnedSessions";
 import { normalizeSessionSortMode } from "../../shared/sessionSort";
 import { normalizeHiddenModules } from "../../shared/hiddenModules";
+import { normalizeUsageQueryProviders } from "../../shared/types/usageQuery";
 import { normalizeHiddenComposerFeatures } from "../../shared/composerFeatures";
 import { parseBusySendDelivery } from "../../shared/busySendDelivery";
 import { parseSessionStatusPlacement } from "../../shared/sessionStatusPlacement";
@@ -345,8 +346,11 @@ Gitmoji 对应关系：
 	// 默认开；与设置页手动「更新到最新」同一链路（manifest 校验 + 上一版备份，可还原）。
 	catalogAutoUpdate: true,
 
-	// 更新源：默认国内 AtomGit 源（第一首选）；用户可切 GitHub 官方源（见 updateSources.ts）
-	updateSource: "atomgit",
+	// 更新源：APIX 只发布 GitHub Release（仓库公开后 electron-updater 才能匿名读取）。
+	updateSource: "github",
+
+	// 用量查询开关：默认关闭；用户在「设置 → 用量查询」配置并打开后才展示到左下角。
+	usageQueryProviders: [],
 
 	// 自定义镜像前缀（保留向下兼容字段），空串 = 未填
 	customUpdateSourceUrl: "",
@@ -388,24 +392,16 @@ Gitmoji 对应关系：
 };
 
 /**
- * updateSource 一次性迁移（v0.7.5 默认源 github → atomgit）：
+ * updateSource 一次性迁移（APIX）：旧设置里的 atomgit 统一回到 GitHub。
  *
- * 背景：v0.7.5 把更新源默认值从 "github" 改为 "atomgit"（国内加速源第一首选），
- * 但设置对象是整体持久化的——旧用户 settings.json 里已写死 "github"，
- * spread 合并后仍会盖掉新默认值，永远享受不到 AtomGit 镜像。
- *
- * 规则（一次性，尊重用户后续选择）：
- * - 已迁移过（标记位 true）→ 不再改动，用户显式保存的 "github" 永远生效；
- * - 从未持久化过更新源（旧字段缺省，新装用户）→ 直接用新默认 atomgit，无需迁移；
- * - 持久化过 "github" 且未迁移 → 补迁移为 "atomgit" 并写标记，此后用户改回 github 不再干预。
- *
- * 纯函数直接改传入对象并返回是否发生了迁移：SettingsStore 依赖 electron，
- * node --test 无法直接 import 该模块，抽成纯函数才能做行为级单测。
+ * APIX 的发布物只在 GitHub Release 上，AtomGit 坐标指向原 PiDeck 上游，
+ * 继续保留会把 APIX 用户带到错误的更新源；这里做一次无痛归一化，
+ * 之后用户不再能在 UI 里选择 AtomGit。
  */
-export function migrateUpdateSourceToAtomgit(settings: { updateSource?: unknown; updateSourceAtomgitMigrated?: unknown }): boolean {
-	if (settings.updateSourceAtomgitMigrated === true) return false;
-	if (settings.updateSource !== "github") return false;
-	settings.updateSource = "atomgit";
+export function migrateUpdateSourceToGithub(settings: { updateSource?: unknown; updateSourceAtomgitMigrated?: unknown }): boolean {
+	if (settings.updateSource === "github" || settings.updateSource === undefined) return false;
+	if (settings.updateSource !== "atomgit") return false;
+	settings.updateSource = "github";
 	settings.updateSourceAtomgitMigrated = true;
 	return true;
 }
@@ -526,11 +522,14 @@ export class SettingsStore {
 				this.settings.fontFamilyMono = "system-mono";
 			}
 
-			// 兼容迁移：更新源默认 github → atomgit（一次性，写标记后尊重用户显式选择）。
-			if (migrateUpdateSourceToAtomgit(this.settings)) {
+			// 兼容迁移：AtomGit 坐标已不适用于 APIX，旧值统一回到 GitHub Release。
+			if (migrateUpdateSourceToGithub(this.settings)) {
 				// 迁移后立即落盘：防止后续任一次保存把未迁移状态写回（与宽度迁移同策略）
 				void this.save().catch(() => undefined);
 			}
+
+			// 用量查询开关：旧 JSON 缺字段由默认 [] 兜底；存在时也只保留两个已知 id。
+			this.settings.usageQueryProviders = normalizeUsageQueryProviders(this.settings.usageQueryProviders);
 
 			if (this.settings.logoStyle !== "classic" || this.settings.logoCustomImage) {
 				this.settings.logoStyle = "classic";
@@ -890,12 +889,15 @@ export class SettingsStore {
 			safePatch.acpTools = sanitizeAcpTools(safePatch.acpTools);
 		}
 
-		// 更新源 id 归一化（只允许已知枚举：atomgit 第一首选，github 官方；其余历史值回退 atomgit）。
+		// 更新源 id 归一化：APIX 只有 GitHub Release 通道，任何已知旧值都收敛到 github。
 		if ("updateSource" in safePatch) {
 			const candidate = safePatch.updateSource;
 			const known = typeof candidate === "string" && (candidate === "atomgit" || candidate === "github");
-			if (known) safePatch.updateSource = candidate;
+			if (known) safePatch.updateSource = "github";
 			else delete safePatch.updateSource;
+		}
+		if ("usageQueryProviders" in safePatch) {
+			safePatch.usageQueryProviders = normalizeUsageQueryProviders(safePatch.usageQueryProviders);
 		}
 		if ("customUpdateSourceUrl" in safePatch && typeof safePatch.customUpdateSourceUrl !== "string") {
 			delete safePatch.customUpdateSourceUrl;

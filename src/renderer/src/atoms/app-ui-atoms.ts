@@ -4,6 +4,7 @@ import type { BusySendDelivery } from "../../../shared/busySendDelivery";
 import type { AgentBackend } from "../../../shared/types";
 import { APP_DISPLAY_NAME_DEFAULT, type LogoStyle } from "../../../shared/types/settings";
 import type { QuickMessagesSnapshot } from "../../../shared/types/quickMessages";
+import type { UsageQueryProviderId } from "../../../shared/types/usageQuery";
 import type { ReplyActionsSnapshot } from "../../../shared/types/replyActions";
 import { isModuleHidden } from "../../../shared/hiddenModules";
 import type { SettingsFieldAnchorSlug } from "../utils/settingsFieldAnchors";
@@ -20,7 +21,7 @@ export const appDisplayNameAtom = atom<string>(APP_DISPLAY_NAME_DEFAULT);
 
 export const activeEditorFileAtom = atom<string | null>(null);
 
-export type SettingsTabId = "common" | "shortcuts" | "appearance" | "terminal" | "proxy" | "web" | "editors" | "git" | "dev" | "im" | "pet" | "notification" | "storage" | "backup" | "usage" | "process" | "vision" | "imagegen" | "videogen" | "acp" | "hostplugins";
+export type SettingsTabId = "common" | "usageQuery" | "shortcuts" | "appearance" | "terminal" | "proxy" | "web" | "editors" | "git" | "dev" | "im" | "pet" | "notification" | "storage" | "backup" | "usage" | "process" | "vision" | "imagegen" | "videogen" | "acp" | "hostplugins";
 
 export type SettingsSectionId = "git" | "dev-pi-rpc" | SettingsFieldAnchorSlug;
 
@@ -47,6 +48,9 @@ export const openSettingsAtom = atom(null, (_get, set, target?: SettingsFocusTar
 export const defaultAgentBackendAtom = atom<AgentBackend>("pi");
 
 export const hiddenModulesAtom = atom<readonly string[]>([]);
+
+/** 已启用的用量查询供应商；由 App 在设置加载/保存后同步，供左下角用量入口订阅。 */
+export const usageQueryProvidersAtom = atom<readonly UsageQueryProviderId[]>([]);
 
 export const imageGenModuleHiddenAtom = atom((get) => isModuleHidden(get(hiddenModulesAtom), "imagegen"));
 

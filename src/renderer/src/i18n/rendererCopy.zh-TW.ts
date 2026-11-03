@@ -2,7 +2,7 @@
  * 本文件由 `node scripts/genZhTwCopy.mjs` 生成，请勿手改。
  * 文案改动请修改对应的 zh-CN 源文件后重新生成；转换规则见该脚本的 OVERRIDES。
  * 注释刻意保留简体：属于开发者视角文本，不面向用户。
- * source-sha256: dcdbff2f5faae1aff0038fcb24ab2ff90e425fb389a64e4834446717922e471e（来自 src/renderer/src/i18n/rendererCopy.zh-CN.ts 的词典区块指纹，由 tests/zhTwCopy.test.mjs 校验新鲜度）
+ * source-sha256: 4d912df50b253fac98d863df157fa4335cc7e9c17535f1f488f4131b8d8cc346（来自 src/renderer/src/i18n/rendererCopy.zh-CN.ts 的词典区块指纹，由 tests/zhTwCopy.test.mjs 校验新鲜度）
  */
 import { mainProcessZhTW } from "../../../shared/i18n/mainProcessCopy.zh-TW";
 import type { TranslationKey } from "./rendererCopy.zh-CN";
@@ -3839,6 +3839,21 @@ export const zhTW: Record<TranslationKey, string> = {
 	"settings.searchHint": "支援中文、英文和拼音首字母：dl → 代理，ylcx → 用量查詢。↑↓ 選擇，Enter 跳轉",
 	"settings.searchNoResult": "沒有匹配的設定項",
 	"settings.tabs.common": "常用設定",
+	"settings.tabs.usageQuery": "用量查詢",
+	"settings.usageQuery.title": "用量查詢",
+	"settings.usageQuery.description": "配置供應商後在左下角「今日用量」展示餘額或 Credits；只有開啟開關的供應商會被查詢。",
+	"settings.usageQuery.aibvv": "AI-AAA（aibvv.cn）",
+	"settings.usageQuery.qoder": "Qoder",
+	"settings.usageQuery.configured": "已配置",
+	"settings.usageQuery.notConfigured": "未配置",
+	"settings.usageQuery.configure": "去配置",
+	"settings.usageQuery.enable": "在「今日用量」中顯示",
+	"settings.usageQuery.refresh": "重新檢測",
+	"settings.usageQuery.refreshing": "檢測中…",
+	"settings.usageQuery.aibvvHint": "需要先在配置管理裡手動登入或填寫 AI-AAA 的 API Key。",
+	"settings.usageQuery.qoderHint": "使用 Qoder Provider 的登入憑據；配置完成後開啟開關即可。",
+	"settings.usageQuery.footer": "左下角入口只展示已開啟開關且已配置的供應商；可以只配置其中一個。",
+	"settings.usageQuery.notConfiguredHint": "配置完成後才能開啟開關。",
 	"settings.tabs.shortcuts": "快捷鍵",
 	"settings.tabs.notification": "通知設定",
 	"settings.tabs.appearance": "外觀設定",
@@ -4473,11 +4488,11 @@ export const zhTW: Record<TranslationKey, string> = {
 	"settings.updateSource": "更新源",
 	"settings.updateSourceDesc": "選擇檢測與下載更新使用的網路通道。國內推薦使用 AtomGit 加速源，也可切換至 GitHub 官方通道。",
 	"settings.updateSourceAtomGit": "AtomGit（推薦）",
-	"settings.updateSourceGithub": "GitHub 官方",
+	"settings.updateSourceGithub": "GitHub（APIX）",
 	"settings.updateSourceCustom": "自定義映象…",
 	"settings.updateSourceCustomHint": "填寫映象服務商的地址字首，例如 https://ghfast.top",
 	"settings.updateSourceCustomInvalid": "地址需以 http(s):// 開頭",
-	"settings.updateSourceFeedOfficial": "使用應用內建的 GitHub 官方通道",
+	"settings.updateSourceFeedOfficial": "從 APIX 的 GitHub Release 檢查更新",
 	"settings.updateSourceFeedPreview": "當前更新源地址：{url}",
 	"settings.updateMirrorChecking": "正在檢測映象可用性…",
 	"settings.updateMirrorOk": "可用 · {speed} KB/s · {latency} ms",
@@ -4516,7 +4531,7 @@ export const zhTW: Record<TranslationKey, string> = {
 	"settings.manualUpdateDesc": "當前平臺不支援應用內更新；檢測到新版本後會推薦對應安裝包，一鍵下載即可。",
 	"settings.portableUpdateNotice": "便攜版應用內更新會執行 NSIS 安裝包並變成安裝版（開始選單/桌面快捷方式，資料目錄可能改變）。若要保持便攜，請到 GitHub Release 手動下載 portable 包。",
 	"settings.portableUpdateOpenRelease": "前往 GitHub 下 portable",
-	"settings.updateGithubFailHint": "官方 GitHub 直連失敗時，可在下方「更新源」切換到國內映象。",
+	"settings.updateGithubFailHint": "無法讀取 APIX Release 時，請確認倉庫已公開且網路可訪問 GitHub。",
 	"settings.updateUpToDate": "已是最新版本",
 	"settings.updateErrorDetail": "更新失敗：{error}",
 	"settings.checkUpdateRetry": "重試檢測",
@@ -4561,7 +4576,7 @@ export const zhTW: Record<TranslationKey, string> = {
 	"dataMode.mismatchDesc": "當前資料目錄屬於另一通道的資料模式，繼續使用可能導致兩個通道的資料互相混淆。",
 	"dataMode.mismatchContinue": "繼續使用",
 	"dataMode.mismatchQuit": "退出",
-	"settings.updateSourceDevLocked": "開發版固定使用 GitHub 更新源（預釋出通道）",
+	"settings.updateSourceDevLocked": "開發版固定使用 APIX 的 GitHub 更新源（預釋出通道）",
 	"settings.dataEnvSectionTitle": "資料環境",
 	"settings.dataEnvCurrentMode": "當前資料模式",
 	"settings.dataEnvSwitchButton": "切換資料模式",

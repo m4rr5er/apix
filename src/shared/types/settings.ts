@@ -8,6 +8,7 @@ import { createDefaultExternalEditorSettings, type ExternalEditorSettings } from
 import type { SecurityConfig } from "./security";
 import type { CustomThemeSnapshot } from "../customThemes";
 import { createDefaultSoundAlertSettings, type SoundAlertSettings } from "./soundAlert";
+import type { UsageQueryProviderId } from "./usageQuery";
 
 export type SendShortcutMode = "enter-send" | "ctrl-enter-send" | "shift-enter-send";
 
@@ -378,6 +379,9 @@ export type AppSettings = {
 
 	updateSourceAtomgitMigrated?: boolean;
 
+	/** 已启用的用量查询供应商；默认空数组 = 不查询、左下角不展示。 */
+	usageQueryProviders: UsageQueryProviderId[];
+
 	updateLastCheckAt?: number;
 
 	updateNotifiedVersion?: string;
@@ -654,6 +658,7 @@ export function createDefaultAppSettings(): AppSettings {
 		catalogAutoUpdate: true,
 
 		updateSource: "github",
+		usageQueryProviders: [],
 		customUpdateSourceUrl: "",
 
 		piRpcOffline: false,

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useAtomValue } from "jotai";
 import { AlertCircle, ChartColumnBig, RefreshCw } from "lucide-react";
 import type { AiAaaUsageResult, AiAaaUsageSnapshot } from "../../../../shared/types/aiAaaUsage";
 import type { QoderQuotaBucket, QoderUsageResult, QoderUsageSnapshot } from "../../../../shared/types/qoderUsage";
@@ -9,6 +10,7 @@ import { Badge } from "../ui-shadcn/badge";
 import { Button } from "../ui-shadcn/button";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui-shadcn/popover";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui-shadcn/tooltip";
+import { usageQueryProvidersAtom } from "../../atoms/app-ui-atoms";
 
 function formatTime(ts: number): string {
 	try {
@@ -190,26 +192,38 @@ export function AiAaaUsageButton() {
 	const [qoderResult, setQoderResult] = useState<QoderUsageResult | null>(null);
 	const [loading, setLoading] = useState(false);
 	const requestId = useRef(0);
+	const enabledProviders = useAtomValue(usageQueryProvidersAtom);
+	const aibvvEnabled = enabledProviders.includes("aibvv");
+	const qoderEnabled = enabledProviders.includes("qoder");
 
-	const load = useCallback(async (force: boolean) => {
-		const id = ++requestId.current;
-		setLoading(true);
-		try {
-			const [next, qoderNext] = await Promise.all([window.piDesktop.aiAaaUsage.get(force).catch((): AiAaaUsageResult => ({ ok: false, code: "network" })), window.piDesktop.qoderUsage.get(force).catch((): QoderUsageResult => ({ ok: false, code: "network" }))]);
-			if (id === requestId.current) {
-				setResult(next);
-				setQoderResult(qoderNext);
+	const load = useCallback(
+		async (force: boolean) => {
+			const id = ++requestId.current;
+			setLoading(true);
+			try {
+				const [next, qoderNext] = await Promise.all([
+					aibvvEnabled ? window.piDesktop.aiAaaUsage.get(force).catch((): AiAaaUsageResult => ({ ok: false, code: "network" })) : Promise.resolve<AiAaaUsageResult | null>(null),
+					qoderEnabled ? window.piDesktop.qoderUsage.get(force).catch((): QoderUsageResult => ({ ok: false, code: "network" })) : Promise.resolve<QoderUsageResult | null>(null),
+				]);
+				if (id === requestId.current) {
+					setResult(next);
+					setQoderResult(qoderNext);
+				}
+			} finally {
+				if (id === requestId.current) setLoading(false);
 			}
-		} finally {
-			if (id === requestId.current) setLoading(false);
-		}
-	}, []);
+		},
+		[aibvvEnabled, qoderEnabled],
+	);
 
 	useEffect(() => {
 		if (open) void load(false);
 	}, [open, load]);
 
 	const retry = () => void load(true);
+
+	// 两个开关都关闭 = 左下角完全不展示用量入口（用户明确关闭了这项能力）。
+	if (!aibvvEnabled && !qoderEnabled) return null;
 
 	return (
 		<Popover open={open} onOpenChange={setOpen}>
@@ -236,9 +250,9 @@ export function AiAaaUsageButton() {
 					</Button>
 				</div>
 				<div className="p-4">
-					{loading && !result && <div className="py-6 text-center text-caption text-muted-foreground">{t("aiAaaUsage.loading")}</div>}
-					{result?.ok && <UsageBody snapshot={result.snapshot} />}
-					{result && !result.ok && (
+					{loading && !result && !qoderResult && <div className="py-6 text-center text-caption text-muted-foreground">{t("aiAaaUsage.loading")}</div>}
+					{aibvvEnabled && result?.ok && <UsageBody snapshot={result.snapshot} />}
+					{aibvvEnabled && result && !result.ok && (
 						<div className="flex flex-col items-center gap-2 py-4 text-center">
 							<AlertCircle className="size-5 text-warning" aria-hidden="true" />
 							<div className="text-control font-medium">{errorCopy(result.code, result.status).title}</div>
@@ -248,7 +262,7 @@ export function AiAaaUsageButton() {
 							</Button>
 						</div>
 					)}
-					<QoderUsageSection result={qoderResult} loading={loading} onRetry={retry} />
+					{qoderEnabled && <QoderUsageSection result={qoderResult} loading={loading} onRetry={retry} />}
 				</div>
 			</PopoverContent>
 		</Popover>

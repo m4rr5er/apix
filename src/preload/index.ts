@@ -992,6 +992,9 @@ const api = {
 	qoderUsage: {
 		get: (force?: boolean) => ipcRenderer.invoke(ipcChannels.qoderUsageGet, force) as Promise<QoderUsageResult>,
 	},
+	usageQuery: {
+		status: () => ipcRenderer.invoke(ipcChannels.usageQueryStatus) as Promise<import("../shared/types/usageQuery").UsageQueryProviderStatus>,
+	},
 	config: {
 		qoderProviderSetup: (input: QoderProviderSetupInput) => ipcRenderer.invoke(ipcChannels.configQoderProviderSetup, input) as Promise<QoderProviderSetupResult>,
 		qoderProviderStatus: () => ipcRenderer.invoke(ipcChannels.configQoderProviderStatus) as Promise<QoderProviderStatus>,

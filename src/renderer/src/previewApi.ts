@@ -225,6 +225,7 @@ let previewSettings: AppSettings = {
 	catalogAutoUpdate: true,
 
 	updateSource: "github",
+	usageQueryProviders: [],
 	customUpdateSourceUrl: "",
 
 	piRpcOffline: false,
@@ -861,6 +862,9 @@ export function createPreviewApi(): PiDesktopApi {
 		},
 		qoderUsage: {
 			get: async () => ({ ok: false, code: "not-configured" }) as import("../../shared/types/qoderUsage").QoderUsageResult,
+		},
+		usageQuery: {
+			status: async () => ({ aibvv: false, qoder: false }),
 		},
 		codexSessions: {
 			scan: async () => [],

@@ -6,7 +6,7 @@ import { t, type TranslationKey } from "../../../i18n";
  * 用户可能先改外观再改语言，但「常用设置」里的项更容易对上导航。
  */
 
-export type SettingsUnsavedTabId = "common" | "shortcuts" | "appearance" | "proxy" | "web" | "editors" | "git" | "dev" | "im" | "pet" | "notification" | "storage" | "usage" | "process" | "vision" | "imagegen" | "acp";
+export type SettingsUnsavedTabId = "common" | "usageQuery" | "shortcuts" | "appearance" | "proxy" | "web" | "editors" | "git" | "dev" | "im" | "pet" | "notification" | "storage" | "usage" | "process" | "vision" | "imagegen" | "acp";
 
 /** 单条变更项：tab 名 + 字段名（均为 i18n key，渲染时再翻译）。 */
 export type SettingsUnsavedItem = {
@@ -29,6 +29,7 @@ type FieldCatalogEntry = {
 
 const TAB_LABEL_KEYS: Record<SettingsUnsavedTabId, TranslationKey> = {
 	common: "settings.tabs.common",
+	usageQuery: "settings.tabs.usageQuery",
 	shortcuts: "settings.tabs.shortcuts",
 	appearance: "settings.tabs.appearance",
 	proxy: "settings.tabs.proxy",
@@ -52,6 +53,7 @@ const TAB_LABEL_KEYS: Record<SettingsUnsavedTabId, TranslationKey> = {
  */
 const FIELD_CATALOG: readonly FieldCatalogEntry[] = [
 	{ field: "language", tab: "common", itemKey: "settings.language" },
+	{ field: "usageQueryProviders", tab: "usageQuery", itemKey: "settings.usageQuery.title" },
 	{ field: "shortcuts", tab: "shortcuts", itemKey: "settings.tabs.shortcuts" },
 	{ field: "sessionTabOpenMode", tab: "common", itemKey: "settings.sessionTabOpenMode" },
 	{ field: "autoSessionTitle", tab: "common", itemKey: "settings.autoSessionTitle" },

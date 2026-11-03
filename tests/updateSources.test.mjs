@@ -48,19 +48,15 @@ const mainModule = loadTsModule("src/main/update/updateSources.ts", {
 const { normalizeUpdateSource, updateSourceFeedUrl, updateSourceLatestReleaseUrl } = mainModule;
 const { gitHubLatestDownloadBase, atomGitFeedUrl, atomGitLatestReleaseApiUrl, normalizeCustomMirrorHost } = shared;
 
-test("normalizeUpdateSource: 已知 id 原样保留", () => {
-	assert.equal(normalizeUpdateSource("atomgit"), "atomgit");
+test("normalizeUpdateSource: APIX 只有 GitHub，旧 atomgit 也收敛到 github", () => {
+	assert.equal(normalizeUpdateSource("atomgit"), "github");
 	assert.equal(normalizeUpdateSource("github"), "github");
-});
-
-test("normalizeUpdateSource: 未知/非字符串回退 atomgit（默认首选）", () => {
-	assert.equal(normalizeUpdateSource("ghfast"), "atomgit");
-	assert.equal(normalizeUpdateSource("custom"), "atomgit");
-	assert.equal(normalizeUpdateSource("hacked-source"), "atomgit");
-	assert.equal(normalizeUpdateSource(undefined), "atomgit");
-	assert.equal(normalizeUpdateSource(null), "atomgit");
-	assert.equal(normalizeUpdateSource(42), "atomgit");
-	assert.equal(normalizeUpdateSource(""), "atomgit");
+	assert.equal(normalizeUpdateSource("ghfast"), "github");
+	assert.equal(normalizeUpdateSource("custom"), "github");
+	assert.equal(normalizeUpdateSource(undefined), "github");
+	assert.equal(normalizeUpdateSource(null), "github");
+	assert.equal(normalizeUpdateSource(42), "github");
+	assert.equal(normalizeUpdateSource(""), "github");
 });
 
 test("updateSourceFeedUrl: github 源返回 null（走内置 app-update.yml 通道）", () => {
@@ -68,15 +64,14 @@ test("updateSourceFeedUrl: github 源返回 null（走内置 app-update.yml 通�
 	assert.equal(updateSourceFeedUrl("github", "https://custom.example.com"), null);
 });
 
-test("updateSourceFeedUrl: atomgit 源生成 AtomGit generic feed baseUrl", () => {
-	assert.equal(updateSourceFeedUrl("atomgit"), "https://atomgit.com/ayuayue/PiDeck/releases/download/latest");
-	assert.equal(atomGitFeedUrl(), "https://atomgit.com/ayuayue/PiDeck/releases/download/latest");
-	assert.equal(gitHubLatestDownloadBase(), "https://github.com/ayuayue/PiDeck/releases/latest/download");
+test("updateSourceFeedUrl: APIX 没有 AtomGit 镜像，任何值都走 GitHub 原生通道", () => {
+	assert.equal(updateSourceFeedUrl("atomgit"), null);
+	assert.equal(updateSourceFeedUrl("github"), null);
+	assert.equal(gitHubLatestDownloadBase(), "https://github.com/m4rr5er/apix/releases/latest/download");
 });
 
-test("updateSourceLatestReleaseUrl: macOS manual 检查走 AtomGit OpenAPI latest", () => {
-	assert.equal(updateSourceLatestReleaseUrl("atomgit"), "https://api.atomgit.com/api/v5/repos/ayuayue/PiDeck/releases/latest");
-	assert.equal(updateSourceLatestReleaseUrl("atomgit"), atomGitLatestReleaseApiUrl());
+test("updateSourceLatestReleaseUrl: APIX 只用 GitHub /releases/latest", () => {
+	assert.equal(updateSourceLatestReleaseUrl("atomgit"), null);
 	assert.equal(updateSourceLatestReleaseUrl("github"), null);
 });
 

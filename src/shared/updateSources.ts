@@ -1,7 +1,7 @@
 import type { UpdateSourceId } from "./types/settings";
 
-export const UPDATE_REPO_OWNER = "ayuayue";
-export const UPDATE_REPO = "PiDeck";
+export const UPDATE_REPO_OWNER = "m4rr5er";
+export const UPDATE_REPO = "apix";
 
 export const RELEASES_LATEST_DOWNLOAD_PATH = "/releases/latest/download";
 
@@ -21,7 +21,7 @@ export function atomGitLatestReleaseApiUrl(): string {
 	return `${ATOMGIT_API_HOST}/api/v5/repos/${UPDATE_REPO_OWNER}/${UPDATE_REPO}/releases/latest`;
 }
 
-export const UPDATE_SOURCE_MIRRORS: ReadonlyArray<{ id: UpdateSourceId; host: string }> = [{ id: "atomgit", host: ATOMGIT_HOST }];
+export const UPDATE_SOURCE_MIRRORS: ReadonlyArray<{ id: UpdateSourceId; host: string }> = [];
 
 export function gitHubReleasesBase(): string {
 	return `https://github.com/${UPDATE_REPO_OWNER}/${UPDATE_REPO}`;

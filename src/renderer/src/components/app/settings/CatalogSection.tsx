@@ -68,11 +68,11 @@ export function CatalogSection(props: { updateSource?: UpdateSourceId; customUpd
 	);
 	// 当前目录更新源的展示名：与应用更新同源，直接复用同一份清单与 label。
 	const catalogSourceLabel = useMemo(() => {
-		const source = props.updateSource ?? "atomgit";
+		const source = props.updateSource ?? "github";
 		if (source === "github") return t("settings.updateSourceGithub");
-		if (source === "atomgit") return t("settings.updateSourceAtomGit");
+		if (source === "atomgit") return t("settings.updateSourceGithub");
 		const mirror = UPDATE_SOURCE_MIRRORS.find((m) => m.id === source);
-		return mirror ? mirror.host : t("settings.updateSourceAtomGit");
+		return mirror ? mirror.host : t("settings.updateSourceGithub");
 	}, [props.updateSource]);
 
 	const refresh = useCallback(() => {
