@@ -195,6 +195,35 @@ export class PiModelCapabilityCache {
 		return this.startRefresh(generation, loadExtensions);
 	}
 
+	/**
+	 * 把外部已经拿到的权威模型列表并入当前快照。
+	 *
+	 * 典型场景：Qoder PAT 登录已经用 `pi --list-models` 拿到 Qoder 模型，但随后的
+	 * capability probe 可能因为扩展加载慢/临时失败而返回空快照；如果只保留空快照，
+	 * 模型选择器会一直显示「没有可用模型」。这里只补模型，不伪造 thinking 档位。
+	 */
+	publishModels(models: readonly AvailableModel[]): void {
+		if (this.disposed || models.length === 0) return;
+		const base = this.snapshot;
+		const merged = new Map<string, AvailableModel>();
+		for (const model of base?.models ?? []) merged.set(modelKey(model.provider, model.id), cloneModel(model));
+		for (const raw of models) {
+			const model = toAvailableModel(raw);
+			if (!model) continue;
+			const key = modelKey(model.provider, model.id);
+			const previous = merged.get(key);
+			merged.set(key, previous ? { ...previous, ...model } : model);
+		}
+		if (merged.size === 0) return;
+		this.snapshot = {
+			generation: base?.generation ?? this.generation,
+			createdAt: (this.deps.now ?? Date.now)(),
+			loadExtensions: true,
+			models: [...merged.values()],
+		};
+		this.failedGeneration = null;
+	}
+
 	/** Clear exact results without forcing an immediate spawn. */
 	invalidate(): void {
 		if (this.disposed) return;

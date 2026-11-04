@@ -3595,10 +3595,21 @@ app
 						getSettings: () => settingsStore.get(),
 						logger: appLogger,
 
-						afterLogin: async () => {
+						afterLogin: async (models) => {
 							invalidateModelListCache();
 							const snapshot = await piModelCapabilityCache?.refresh({ loadExtensions: true });
-							if (!snapshot) await refreshModelList(piLocator, settingsStore, configManager).catch(() => undefined);
+							const snapshotHasQoder = qoderModelsFromCatalog(snapshot?.models).length > 0;
+							// 登录流程已经拿到模型；capability probe 可能因扩展冷启动慢或空快照而没带上
+							// Qoder，此时把 CLI 结果（拿不到就用登录结果）直接发布进快照，避免模型选择器继续显示「没有可用模型」。
+							if (!snapshotHasQoder) {
+								const cliModels = await refreshModelList(piLocator, settingsStore, configManager).catch(() => []);
+								piModelCapabilityCache?.publishModels(cliModels.length > 0 ? cliModels : models);
+								void appLogger.info("qoder-provider", "Qoder model snapshot reconciled after login", {
+									snapshotModels: snapshot?.models.length ?? 0,
+									cliModels: cliModels.length,
+									loginModels: models.length,
+								});
+							}
 						},
 					},
 					input,

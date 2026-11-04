@@ -508,7 +508,9 @@ export function registerSystemIpc(deps: SystemIpcDeps): void {
 	ipcMain.handle(ipcChannels.projectsListModels, async (_event, _projectId?: string) => {
 		try {
 			const snapshot = await modelCapabilityCache.ensure();
-			const models = snapshot?.models ?? (await fetchModelList(piLocator, settingsStore, configManager));
+			// 空快照（例如扩展尚未加载完）不能挡住 CLI 缓存：Qoder 登录后 CLI 已拿到模型，
+			// 但 capability probe 可能暂时返回空数组，旧的 `??` 会让选择器误报「没有可用模型」。
+			const models = snapshot && snapshot.models.length > 0 ? snapshot.models : await fetchModelList(piLocator, settingsStore, configManager);
 			void appLogger.info("pi", "Model list resolved", {
 				count: models.length,
 				capabilitiesReady: snapshot !== null,

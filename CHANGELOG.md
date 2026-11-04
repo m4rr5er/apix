@@ -1,3 +1,14 @@
+## v1.0.4 (2026-11-04)
+
+This release fixes Qoder PAT sign-in succeeding while the model picker still reports no available models.
+
+### 🐛 Fixes
+- **Post-login model snapshot** — Models already returned by Qoder sign-in are published into the capability snapshot instead of being replaced by an empty probe result.
+- **Empty-snapshot fallback** — The model picker falls back to the CLI model cache when the capability snapshot is empty, instead of incorrectly reporting "no models in models.json / auth.json".
+- **Multi-account credential detection** — Qoder accounts in `multiprovider-auth.json` are recognized in addition to `auth.json`, so a restart no longer marks Qoder as unconfigured.
+
+---
+
 ## v1.0.3 (2026-11-04)
 
 This release fixes Qoder PAT sign-in on a fresh machine where the provider extension is not installed yet.

@@ -96,7 +96,9 @@ export function QoderProviderDialog(props: { open: boolean; onOpenChange: (open:
 				setPat("");
 
 				const nextStatus = await desktopApi.config.qoderProviderStatus().catch(() => null);
-				setStatus(nextStatus ?? { configured: true, region, models: next.models });
+				// 登录命令本身已经返回模型；状态快照的模型刷新可能晚一拍（或 capability
+				// probe 暂时为空），不能把已拿到的模型覆盖成空列表并提示「快照没有模型」。
+				setStatus(nextStatus && nextStatus.models.length > 0 ? nextStatus : { configured: true, region, models: next.models });
 			}
 		} catch (cause) {
 			setError(cause instanceof Error ? cause.message : String(cause));

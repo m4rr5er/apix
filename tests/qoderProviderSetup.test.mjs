@@ -43,6 +43,10 @@ test("hasQoderProviderAuth：只认 auth.json 里的 qoder 键，损坏文件按
 		assert.equal(hasQoderProviderAuth(dir), false);
 		fs.writeFileSync(path.join(dir, "auth.json"), "{not-json");
 		assert.equal(hasQoderProviderAuth(dir), false);
+		// 多账号池里存在 Qoder 账号也算已配置（扩展支持 multiprovider-auth.json）。
+		fs.writeFileSync(path.join(dir, "auth.json"), JSON.stringify({ openai: { type: "api_key" } }));
+		fs.writeFileSync(path.join(dir, "multiprovider-auth.json"), JSON.stringify({ providers: { qoder: { accounts: [{ credential: { access: "x" } }] } } }));
+		assert.equal(hasQoderProviderAuth(dir), true);
 	} finally {
 		fs.rmSync(dir, { recursive: true, force: true });
 	}
@@ -57,4 +61,14 @@ test("getQoderProviderStatus：只返回配置状态与模型，不回传任何 
 	assert.equal(status.region, "global");
 	assert.deepEqual(plain(status.models), [{ provider: "qoder", id: "Ultimate" }]);
 	assert.equal(JSON.stringify(status).includes("secret"), false);
+});
+
+test("登录后的模型快照接线：Qoder 模型会被发布，空 capability 快照不再挡住 CLI 缓存", () => {
+	const indexSource = fs.readFileSync("src/main/index.ts", "utf8");
+	assert.match(indexSource, /afterLogin: async \(models\) =>/);
+	assert.match(indexSource, /piModelCapabilityCache\?\.publishModels\(/);
+	assert.match(indexSource, /qoderModelsFromCatalog\(snapshot\?\.models\)\.length > 0/);
+
+	const systemIpc = fs.readFileSync("src/main/ipc/systemIpc.ts", "utf8");
+	assert.match(systemIpc, /snapshot && snapshot\.models\.length > 0 \? snapshot\.models : await fetchModelList/);
 });

@@ -18,7 +18,7 @@ export type QoderProviderSetupDeps = {
 	piLocator: PiLocator;
 	getSettings: () => AppSettings;
 
-	afterLogin?: () => Promise<void> | void;
+	afterLogin?: (models: QoderProviderModel[]) => Promise<void> | void;
 	logger?: { info(channel: string, message: string, meta?: Record<string, unknown>): void; warn(channel: string, message: string, meta?: Record<string, unknown>): void };
 };
 
@@ -59,9 +59,21 @@ export function qoderModelsFromCatalog(models: readonly AvailableModel[] | null 
 }
 
 export function hasQoderProviderAuth(configDir: string): boolean {
+	const hasProviderKey = (parsed: unknown, provider: string): boolean => isRecord(parsed) && Object.hasOwn(parsed, provider);
 	try {
 		const parsed: unknown = JSON.parse(readFileSync(join(configDir, "auth.json"), "utf8"));
-		return isRecord(parsed) && (Object.hasOwn(parsed, "qoder") || Object.hasOwn(parsed, "qoder-cn"));
+		if (hasProviderKey(parsed, "qoder") || hasProviderKey(parsed, "qoder-cn")) return true;
+	} catch {}
+	// Qoder 扩展也支持 multiprovider-auth.json 多账号池；只查 auth.json 会让已登录用户
+	// 在重启后被判定为「无 Qoder」，模型选择器于是走 --no-extensions 快速档。
+	try {
+		const parsed: unknown = JSON.parse(readFileSync(join(configDir, "multiprovider-auth.json"), "utf8"));
+		const providers = isRecord(parsed) && isRecord(parsed.providers) ? parsed.providers : null;
+		if (!providers) return false;
+		return ["qoder", "qoder-cn"].some((provider) => {
+			const entry = providers[provider];
+			return isRecord(entry) && Array.isArray(entry.accounts) && entry.accounts.length > 0;
+		});
 	} catch {
 		return false;
 	}
@@ -139,7 +151,7 @@ export async function setupQoderProvider(deps: QoderProviderSetupDeps, input: Qo
 
 	const completeLogin = async (models: QoderProviderModel[]): Promise<void> => {
 		try {
-			await deps.afterLogin?.();
+			await deps.afterLogin?.(models);
 		} catch (error) {
 			deps.logger?.warn("qoder-provider", "Qoder provider model refresh after login failed", { region, error: error instanceof Error ? error.message : String(error) });
 		}
