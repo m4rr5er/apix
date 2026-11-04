@@ -1,6 +1,6 @@
 {
   "name": "apix",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "packageManager": "npm@11.6.2",
   "engines": {
     "npm": "^11.6.2"

@@ -1,4 +1,5 @@
 import { app, shell, type BrowserWindow, type NativeImage, type ShortcutDetails } from "electron";
+import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, rmSync, writeFileSync, type Dirent } from "node:fs";
 import { join, dirname, win32 } from "node:path";
@@ -66,6 +67,42 @@ export function resolveAppUserModelId(input: { isDevBuild: boolean; devUserDataD
 export function registerTaskbarIdentityAumid(aumid: string): void {
 	registeredAumid = aumid;
 	lastAppliedSignature = null;
+}
+
+/**
+ * Windows 通知归属的显示名与图标注册表项。
+ *
+ * AUMID 只保证通知归到本应用，不会自动带出名字：没有 `HKCU\Software\Classes\AppUserModelId\<AUMID>`
+ * 的 DisplayName 时，Windows 会把 toast 右上角的来源显示成 AUMID 本身（实测 `com.apix.desktop`）。
+ * IconUri 指向当前 exe，通知来源图标与任务栏保持同一份 APIX 静态图标；正文的品牌字标仍由
+ * `notification-logo.png`（appLogoOverride）负责。
+ */
+export function appUserModelIdRegistryKey(aumid: string): string {
+	return ["HKCU", "Software", "Classes", "AppUserModelId", aumid].join(win32.sep);
+}
+
+/** 纯函数：生成 reg.exe 的两条 add 参数（便于单测，不依赖真实注册表）。 */
+export function buildAppUserModelIdRegistryArgs(input: { aumid: string; displayName: string; iconPath: string }): string[][] {
+	const key = appUserModelIdRegistryKey(input.aumid);
+	return [
+		["add", key, "/v", "DisplayName", "/t", "REG_SZ", "/d", input.displayName, "/f"],
+		["add", key, "/v", "IconUri", "/t", "REG_SZ", "/d", input.iconPath, "/f"],
+	];
+}
+
+/** 写入通知来源身份；失败只记日志，不影响通知正文与其余功能。 */
+export function registerAppUserModelIdIdentity(input: { aumid: string; displayName: string; iconPath: string }): void {
+	if (process.platform !== "win32") return;
+	const regExe = process.env.SystemRoot ? join(process.env.SystemRoot, "System32", "reg.exe") : "reg.exe";
+	for (const args of buildAppUserModelIdRegistryArgs(input)) {
+		try {
+			execFile(regExe, args, { windowsHide: true }, (error) => {
+				if (error) void getAppLogger()?.warn("app-logo", "Failed to register AppUserModelId identity", { aumid: input.aumid, error: error.message });
+			});
+		} catch (error) {
+			void getAppLogger()?.warn("app-logo", "Failed to launch reg.exe for AppUserModelId identity", { aumid: input.aumid, error: error instanceof Error ? error.message : String(error) });
+		}
+	}
 }
 
 /**

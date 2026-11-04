@@ -96,3 +96,43 @@ test("shouldDisableDifferentialDownload: 便携版、缺失默认配置或 E2E �
 	// 普通完整安装版
 	assert.equal(shouldDisableDifferentialDownload({ isPortable: false, hasDefaultConfig: true, isE2E: false }), false);
 });
+
+test("GitHub 检查遇到网络 RST 时自动回退到只读镜像 feed", async () => {
+	const setFeedCalls = [];
+	let checks = 0;
+	const electronUpdaterStub = {
+		autoUpdater: {
+			autoDownload: true,
+			checkForUpdates: async () => {
+				checks += 1;
+				if (checks === 1) throw new Error("net::ERR_CONNECTION_RESET");
+				return { updateInfo: { version: "1.0.5" } };
+			},
+			setFeedURL: (config) => setFeedCalls.push(config),
+			on: () => {},
+			off: () => {},
+		},
+	};
+	const savedFeed = process.env.PIDEK_UPDATE_FEED_URL;
+	delete process.env.PIDEK_UPDATE_FEED_URL;
+	try {
+		const { createRealAutoUpdater, isFallbackableUpdateCheckError } = loadTsCommonJs("src/main/update/createAutoUpdater.ts", {
+			stubs: {
+				electron: { app: { isPackaged: false, getAppPath: () => "C:/mock/app", getPath: () => "C:/mock/userData" } },
+				"node:fs": { existsSync: () => true, mkdirSync: () => {}, writeFileSync: () => {} },
+				"electron-updater": electronUpdaterStub,
+			},
+		});
+		assert.equal(isFallbackableUpdateCheckError(new Error("net::ERR_CONNECTION_RESET")), true);
+		assert.equal(isFallbackableUpdateCheckError(new Error("404 Not Found")), false);
+		const updater = createRealAutoUpdater();
+		await updater.checkForUpdates();
+		assert.equal(checks, 2, "直连失败后应重试一次");
+		assert.equal(setFeedCalls.length, 1);
+		assert.equal(setFeedCalls[0].provider, "generic");
+		assert.equal(setFeedCalls[0].url, "https://gh-proxy.com/https://github.com/m4rr5er/apix/releases/latest/download");
+	} finally {
+		if (savedFeed === undefined) delete process.env.PIDEK_UPDATE_FEED_URL;
+		else process.env.PIDEK_UPDATE_FEED_URL = savedFeed;
+	}
+});

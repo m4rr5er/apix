@@ -74,7 +74,7 @@ import type { DataEnvMode } from "../shared/types/dataEnv";
 
 import iconPath from "../../build/icon.png?asset";
 import { applyTrayLogoStyle, applyWindowLogoStyle, resolveLogoImage } from "./appWindowLogo";
-import { applyTaskbarIcon, registerTaskbarIdentityAumid, resolveAppUserModelId, syncTaskbarShortcutIcon } from "./appTaskbarIdentity";
+import { applyTaskbarIcon, registerAppUserModelIdIdentity, registerTaskbarIdentityAumid, resolveAppUserModelId, syncTaskbarShortcutIcon } from "./appTaskbarIdentity";
 
 declare const __PIDECK_DEV_BUILD__: boolean;
 
@@ -153,6 +153,7 @@ if (process.platform === "win32") {
 	app.setAppUserModelId(appUserModelId);
 
 	registerTaskbarIdentityAumid(appUserModelId);
+	registerAppUserModelIdIdentity({ aumid: appUserModelId, displayName: app.isPackaged && __PIDECK_DEV_BUILD__ ? "APIX Dev" : APP_DISPLAY_NAME, iconPath: process.execPath });
 }
 
 if (app.isPackaged) {

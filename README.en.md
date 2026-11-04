@@ -1,7 +1,7 @@
 # APIX
 
 ![Status](https://img.shields.io/badge/status-stable-green)
-![Version](https://img.shields.io/badge/version-1.0.4-blue)
+![Version](https://img.shields.io/badge/version-1.0.5-blue)
 ![License](https://img.shields.io/badge/license-MIT-blue)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey)
 ![Electron](https://img.shields.io/badge/Electron-43-47848f)
@@ -9,7 +9,7 @@
 
 **APIX is a local AI coding workbench built on [pi](https://pi.dev).** It brings pi Agent sessions, projects, model configuration, Git, terminal and extension resources into one native desktop app for developers who work across multiple local repositories.
 
-> **Latest: v1.0.4** (2026-11-04)
+> **Latest: v1.0.5** (2026-11-04)
 
 Download: [GitHub Releases](https://github.com/m4rr5er/apix/releases)
 
@@ -54,8 +54,8 @@ There is still exactly one agent communication channel: **stdio JSON-RPC**. APIX
 
 Download from [Releases](https://github.com/m4rr5er/apix/releases):
 
-- `APIX-1.0.4-setup.exe` — Windows installer
-- `APIX-1.0.4-portable.exe` — Windows portable build
+- `APIX-1.0.5-setup.exe` — Windows installer
+- `APIX-1.0.5-portable.exe` — Windows portable build
 
 Stable and portable builds share the APIX data directory; upgrading never removes your pi configuration or sessions.
 

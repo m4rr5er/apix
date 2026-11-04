@@ -16,6 +16,7 @@ import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { AutoUpdaterLike, AutoUpdaterEventHandlers } from "./autoUpdaterTypes";
 import { UPDATE_REPO_OWNER, UPDATE_REPO } from "./releaseRepo";
+import { gitHubProxyFeedUrl } from "../../shared/updateSources";
 
 export type { AutoUpdaterLike, AutoUpdaterEventHandlers } from "./autoUpdaterTypes";
 
@@ -103,6 +104,12 @@ export function shouldDisableDifferentialDownload(options: { isPortable?: boolea
 	if (options.isPortable) return true;
 	if (options.hasDefaultConfig === false) return true;
 	return false;
+}
+
+/** 可回退到镜像的检查错误：只认网络层/RST/超时，配置错误与 404 不掩盖。 */
+export function isFallbackableUpdateCheckError(error: unknown): boolean {
+	const message = error instanceof Error ? error.message : String(error ?? "");
+	return /ERR_CONNECTION_RESET|ECONNRESET|ERR_CONNECTION_TIMED_OUT|ETIMEDOUT|ENOTFOUND|EAI_AGAIN|ERR_NAME_NOT_RESOLVED|ERR_NETWORK_CHANGED/i.test(message);
 }
 
 /**
@@ -205,11 +212,23 @@ export function createRealAutoUpdater(options?: { feedUrl?: string; isAutoDownlo
 			autoUpdater.allowPrerelease = enabled;
 		},
 		checkForUpdates: async () => {
-			const result = await autoUpdater.checkForUpdates();
-			// electron-updater 在未激活（dev 未切镜像源）时默认静默返回 null。把它提升为错误，
-			// 避免 UpdateService 把「根本未检查」误报成「已是最新」；文案给出可操作指引。
-			if (!result) {
-				throw new Error("更新检查未激活：开发模式下默认不检查，请在设置中选择镜像更新源后重试");
+			const run = async () => {
+				const result = await autoUpdater.checkForUpdates();
+				// electron-updater 在未激活（dev 未切镜像源）时默认静默返回 null。把它提升为错误，
+				// 避免 UpdateService 把「根本未检查」误报成「已是最新」；文案给出可操作指引。
+				if (!result) throw new Error("更新检查未激活：开发模式下默认不检查，请在设置中选择镜像更新源后重试");
+			};
+			try {
+				await run();
+			} catch (error) {
+				// 官方 GitHub provider 在部分网络下会直接 RST（ERR_CONNECTION_RESET）；
+				// 保留用户设置仍为 GitHub，检查失败时才临时切到同 Release 的只读镜像，
+				// 让 latest.yml 与安装包走同一条可访问链路。显式/env feed 与用户镜像不覆盖。
+				if (feedOverride || currentFeedUrl || !isFallbackableUpdateCheckError(error)) throw error;
+				currentFeedUrl = gitHubProxyFeedUrl();
+				autoUpdater.forceDevUpdateConfig = true;
+				autoUpdater.setFeedURL({ provider: "generic", url: currentFeedUrl });
+				await run();
 			}
 		},
 		downloadUpdate: () => autoUpdater.downloadUpdate().then(() => undefined),

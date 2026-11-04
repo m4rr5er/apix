@@ -1,3 +1,14 @@
+## v1.0.5 (2026-11-04)
+
+This release fixes residual PiDeck branding in the app and system notifications, plus GitHub update checks failing with connection resets.
+
+### 🐛 Fixes
+- **APIX display name** — The settings version card, update notices, and system notification titles no longer show PiDeck.
+- **Windows notification identity** — Registers the AUMID display name as `APIX` and uses the blue APIX wordmark as the notification image.
+- **Update-check fallback** — Network-level failures such as `ERR_CONNECTION_RESET` automatically retry through a read-only mirror of the same Release.
+
+---
+
 ## v1.0.4 (2026-11-04)
 
 This release fixes Qoder PAT sign-in succeeding while the model picker still reports no available models.

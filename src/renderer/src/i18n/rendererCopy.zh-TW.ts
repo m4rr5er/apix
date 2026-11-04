@@ -2,7 +2,7 @@
  * 本文件由 `node scripts/genZhTwCopy.mjs` 生成，请勿手改。
  * 文案改动请修改对应的 zh-CN 源文件后重新生成；转换规则见该脚本的 OVERRIDES。
  * 注释刻意保留简体：属于开发者视角文本，不面向用户。
- * source-sha256: c3714948c62e63676b10bb588c59d3a612f9a4f59479ef205e2c3c26617eabc1（来自 src/renderer/src/i18n/rendererCopy.zh-CN.ts 的词典区块指纹，由 tests/zhTwCopy.test.mjs 校验新鲜度）
+ * source-sha256: cef7f7103ed101ecf9569fb91e0502ed27f4d5805fac54d05357576596dd4d7d（来自 src/renderer/src/i18n/rendererCopy.zh-CN.ts 的词典区块指纹，由 tests/zhTwCopy.test.mjs 校验新鲜度）
  */
 import { mainProcessZhTW } from "../../../shared/i18n/mainProcessCopy.zh-TW";
 import type { TranslationKey } from "./rendererCopy.zh-CN";
@@ -4280,7 +4280,7 @@ export const zhTW: Record<TranslationKey, string> = {
 	"settings.logoCustomImageClear": "移除圖片",
 	"settings.logoCustomImageFailed": "圖片讀取失敗：請改用正方形、透明底的 PNG 或 SVG，檔案不要超過 12MB。",
 	"settings.appDisplayName": "應用顯示名稱",
-	"settings.appDisplayNameDesc": "顯示在左上角品牌區與「關於」面板，按輸入原樣呈現（不轉大寫）；留空用 PiDeck。",
+	"settings.appDisplayNameDesc": "顯示在左上角品牌區與「關於」面板，按輸入原樣呈現（不轉大寫）；留空用 APIX。",
 	"navigation.back": "後退",
 	"navigation.forward": "前進",
 	"settings.sessionTabMaxWidth": "會話 Tab 寬度上限",
@@ -4535,7 +4535,7 @@ export const zhTW: Record<TranslationKey, string> = {
 	"settings.updateUpToDate": "已是最新版本",
 	"settings.updateErrorDetail": "更新失敗：{error}",
 	"settings.checkUpdateRetry": "重試檢測",
-	"app.updateCardVersion": "PiDeck v{version}",
+	"app.updateCardVersion": "APIX v{version}",
 	// 更新通道（徽章 + 切换向导，规格 §5）：确认区文案含数据模式预告
 	"settings.channelBadgeStable": "Stable",
 	"settings.channelBadgeDev": "Dev",
@@ -5411,8 +5411,8 @@ export const zhTW: Record<TranslationKey, string> = {
 	"update.openRelease": "開啟 Release",
 	"update.viewInSettings": "檢視設定",
 	"update.readyToInstallTitle": "更新已就緒",
-	"update.readyToInstall": "PiDeck v{version} 已下載完成，重啟即可安裝。",
-	"update.manualReadyToast": "PiDeck v{version} 安裝包已下載，可在設定中開啟。",
+	"update.readyToInstall": "APIX v{version} 已下載完成，重啟即可安裝。",
+	"update.manualReadyToast": "APIX v{version} 安裝包已下載，可在設定中開啟。",
 	"update.installFailedTitle": "更新安裝未啟動",
 	"update.installFailedDetail": "安裝未能啟動：{error}",
 	"update.saveBeforeInstallTitle": "請先儲存檔案更改",
@@ -5423,10 +5423,10 @@ export const zhTW: Record<TranslationKey, string> = {
 	"update.downloadFailedTitle": "更新下載失敗",
 	"update.downloadFailedDetail": "下載失敗：{error}",
 	"update.availableToastTitle": "發現新版本",
-	"update.availableToast": "PiDeck v{version} 可用，可在設定中下載。",
-	"update.availableManualToast": "PiDeck v{version} 可用，可在設定中一鍵下載適配當前裝置的安裝包。",
+	"update.availableToast": "APIX v{version} 可用，可在設定中下載。",
+	"update.availableManualToast": "APIX v{version} 可用，可在設定中一鍵下載適配當前裝置的安裝包。",
 	"update.dotMenuTitle": "有新版本可用",
-	"update.dotMenuApp": "PiDeck v{version}",
+	"update.dotMenuApp": "APIX v{version}",
 	"update.dotMenuPi": "Pi CLI v{version}",
 	"update.dotMenuCatalog": "模型目錄 v{version}",
 	"update.dotHintTitle": "有新版本可用",

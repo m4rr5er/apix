@@ -46,7 +46,7 @@ const mainModule = loadTsModule("src/main/update/updateSources.ts", {
 });
 
 const { normalizeUpdateSource, updateSourceFeedUrl, updateSourceLatestReleaseUrl } = mainModule;
-const { gitHubLatestDownloadBase, atomGitFeedUrl, atomGitLatestReleaseApiUrl, normalizeCustomMirrorHost } = shared;
+const { gitHubLatestDownloadBase, gitHubProxyFeedUrl, atomGitFeedUrl, atomGitLatestReleaseApiUrl, normalizeCustomMirrorHost } = shared;
 
 test("normalizeUpdateSource: APIX 只有 GitHub，旧 atomgit 也收敛到 github", () => {
 	assert.equal(normalizeUpdateSource("atomgit"), "github");
@@ -86,4 +86,9 @@ test("normalizeCustomMirrorHost: trim/去尾斜杠/协议校验", () => {
 	assert.equal(normalizeCustomMirrorHost("   "), null);
 	assert.equal(normalizeCustomMirrorHost(null), null);
 	assert.equal(normalizeCustomMirrorHost(undefined), null);
+});
+
+test("gitHubProxyFeedUrl: 直连失败回退镜像仍指向同一 Release", () => {
+	assert.equal(gitHubProxyFeedUrl(), "https://gh-proxy.com/https://github.com/m4rr5er/apix/releases/latest/download");
+	assert.equal(gitHubProxyFeedUrl("https://mirror.example.com/"), "https://mirror.example.com/https://github.com/m4rr5er/apix/releases/latest/download");
 });

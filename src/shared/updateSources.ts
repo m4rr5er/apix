@@ -23,6 +23,20 @@ export function atomGitLatestReleaseApiUrl(): string {
 
 export const UPDATE_SOURCE_MIRRORS: ReadonlyArray<{ id: UpdateSourceId; host: string }> = [];
 
+/**
+ * GitHub 直连失败时的更新镜像。
+ *
+ * APIX 只发布 GitHub Release；国内网络对 github.com 的 `releases.atom` / 资源下载经常
+ * 直接 RST（electron-updater 报 net::ERR_CONNECTION_RESET）。这里只作为**网络失败后的
+ * 自动回退**，不改变用户设置里的「更新源」；镜像仍从同一 Release 读取 latest.yml，
+ * 安装包的 sha512 仍由 electron-updater 按 latest.yml 校验。
+ */
+export const GITHUB_PROXY_HOST = "https://gh-proxy.com";
+
+export function gitHubProxyFeedUrl(host: string = GITHUB_PROXY_HOST): string {
+	return `${host.replace(/\/+$/, "")}/${gitHubReleasesBase()}/releases/latest/download`;
+}
+
 export function gitHubReleasesBase(): string {
 	return `https://github.com/${UPDATE_REPO_OWNER}/${UPDATE_REPO}`;
 }

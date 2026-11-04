@@ -45,7 +45,7 @@ test("窗口存在时取真实焦点状态", () => {
 test("品牌名常量与 package.json build.productName 一致（安装版通知标题不随 asar 内的 npm 包名漂移）", () => {
 	const { APP_DISPLAY_NAME } = loadTsCommonJs("src/main/utils/appBrand.ts");
 	const pkg = JSON.parse(readFileSync("package.json", "utf8"));
-	assert.equal(APP_DISPLAY_NAME, "PiDeck");
+	assert.equal(APP_DISPLAY_NAME, "APIX");
 	assert.equal(APP_DISPLAY_NAME, pkg.build.productName, "APP_DISPLAY_NAME 必须与 electron-builder 的 productName 保持同一品牌名");
 	assert.notEqual(pkg.name, APP_DISPLAY_NAME, "npm 包名与产品显示名独立，通知标题固定使用品牌常量");
 });

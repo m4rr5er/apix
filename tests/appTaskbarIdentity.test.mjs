@@ -421,3 +421,13 @@ test("syncTaskbarShortcutIcon: 单条快捷方式失败只告警，旧图标文�
 		corrupt.cleanup();
 	}
 });
+
+test("通知 AUMID 注册表：显示 APIX，图标指向当前 exe", () => {
+	const module = loadTsCommonJs(MODULE_PATH, { stubs: { electron: { app: { getPath: () => "C:/tmp" }, shell: {} }, "./appWindowLogo": { resolveLogoImage: () => null }, "./logging/sharedLogger": { getAppLogger: () => null } } });
+	const key = ["HKCU", "Software", "Classes", "AppUserModelId", AUMID].join("\\");
+	const args = module.buildAppUserModelIdRegistryArgs({ aumid: AUMID, displayName: "APIX", iconPath: EXEC_PATH });
+	assert.deepEqual(plain(args), [
+		["add", key, "/v", "DisplayName", "/t", "REG_SZ", "/d", "APIX", "/f"],
+		["add", key, "/v", "IconUri", "/t", "REG_SZ", "/d", EXEC_PATH, "/f"],
+	]);
+});
